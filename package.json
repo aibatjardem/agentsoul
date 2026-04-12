@@ -1,6 +1,6 @@
 {
     "name": "@samiyev/agentsoul",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "Reusable soul-kit: identity, knowledge guides, and 25+ subagents for Claude Code projects. Installs into any project to establish consistent philosophy, architecture rules, and specialist agents.",
     "type": "module",
     "bin": {
