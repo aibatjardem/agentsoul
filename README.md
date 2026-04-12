@@ -1,5 +1,10 @@
 # AgentSoul
 
+[![npm version](https://img.shields.io/npm/v/@samiyev/agentsoul.svg?style=flat-square)](https://www.npmjs.com/package/@samiyev/agentsoul)
+[![CI](https://github.com/imfozilbek/agentsoul/actions/workflows/ci.yml/badge.svg)](https://github.com/imfozilbek/agentsoul/actions/workflows/ci.yml)
+[![license](https://img.shields.io/npm/l/@samiyev/agentsoul.svg?style=flat-square)](./LICENSE)
+[![node](https://img.shields.io/node/v/@samiyev/agentsoul.svg?style=flat-square)](https://nodejs.org)
+
 Переиспользуемый soul-kit для Claude Code: идентичность, философия, 25+ специализированных субагентов. Устанавливается в любой проект одной командой.
 
 > AgentSoul — это **душа + команда специалистов**, которую можно подключить к любому Claude Code проекту. Один раз определил принципы, ценности, архитектурные правила — и применяешь их везде, одинаково, без копирования руками.
