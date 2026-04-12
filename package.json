@@ -4,7 +4,7 @@
     "description": "Reusable soul-kit: identity, knowledge guides, and 25+ subagents for Claude Code projects. Installs into any project to establish consistent philosophy, architecture rules, and specialist agents.",
     "type": "module",
     "bin": {
-        "agentsoul": "./dist/cli.js"
+        "agentsoul": "dist/cli.js"
     },
     "files": [
         "dist",
