@@ -29,6 +29,14 @@
     ],
     "author": "samiyev",
     "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/imfozilbek/agentsoul.git"
+    },
+    "bugs": {
+        "url": "https://github.com/imfozilbek/agentsoul/issues"
+    },
+    "homepage": "https://github.com/imfozilbek/agentsoul#readme",
     "engines": {
         "node": ">=20"
     },
