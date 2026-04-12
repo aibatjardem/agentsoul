@@ -1,0 +1,42 @@
+{
+    "name": "@samiyev/agentsoul",
+    "version": "0.1.0",
+    "description": "Reusable soul-kit: identity, knowledge guides, and 25+ subagents for Claude Code projects. Installs into any project to establish consistent philosophy, architecture rules, and specialist agents.",
+    "type": "module",
+    "bin": {
+        "agentsoul": "./dist/cli.js"
+    },
+    "files": [
+        "dist",
+        "core",
+        "README.md",
+        "LICENSE"
+    ],
+    "scripts": {
+        "build": "tsc",
+        "typecheck": "tsc --noEmit",
+        "clean": "rm -rf dist",
+        "check": "bash core/scripts/check-soul.sh",
+        "prepublishOnly": "npm run clean && npm run build"
+    },
+    "keywords": [
+        "claude-code",
+        "subagents",
+        "ddd",
+        "clean-architecture",
+        "ai-agents",
+        "soul-kit"
+    ],
+    "author": "samiyev",
+    "license": "MIT",
+    "engines": {
+        "node": ">=20"
+    },
+    "dependencies": {
+        "commander": "^12.0.0"
+    },
+    "devDependencies": {
+        "@types/node": "^22.0.0",
+        "typescript": "^5.6.0"
+    }
+}
