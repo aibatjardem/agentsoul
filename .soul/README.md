@@ -51,7 +51,7 @@
 |---|---|
 | Своё правило только для этого проекта | Новый файл в `.soul/local/`, затем `npx agentsoul update` (подключит его в `CLAUDE.md`) |
 | Другая модель для субагентов | `.soul/config.json` → `models`, затем `npx agentsoul update` |
-| Обновить AgentSoul | `npm update @samiyev/agentsoul && npx agentsoul update --dry-run`, потом без `--dry-run` |
+| Обновить AgentSoul | `npm update @aibatjardem/agentsoul && npx agentsoul update --dry-run`, потом без `--dry-run` |
 | Добавить / удалить / переименовать агента или skill | Субагент `soul-keeper` |
 | Проверить, что ничего не разъехалось | `npx agentsoul check` |
 | Сменить стек или расширить домен | Skill `project-initializer` / `glossary-initializer` |

@@ -1,5 +1,5 @@
 {
-    "name": "@samiyev/agentsoul",
+    "name": "@aibatjardem/agentsoul",
     "version": "0.2.0",
     "description": "Soul-kit for Claude Code: soul (always loaded) → skills (guides and setup dialogs, on demand) → subagents (isolated executors with narrow tools and explicit models). Installs, updates safely, validates.",
     "type": "module",
@@ -30,16 +30,19 @@
         "soul-kit",
         "skills"
     ],
-    "author": "samiyev",
+    "author": "aibatjardem",
+    "contributors": [
+        "samiyev (original author, https://github.com/imfozilbek/agentsoul)"
+    ],
     "license": "MIT",
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/imfozilbek/agentsoul.git"
+        "url": "git+https://github.com/aibatjardem/agentsoul.git"
     },
     "bugs": {
-        "url": "https://github.com/imfozilbek/agentsoul/issues"
+        "url": "https://github.com/aibatjardem/agentsoul/issues"
     },
-    "homepage": "https://github.com/imfozilbek/agentsoul#readme",
+    "homepage": "https://github.com/aibatjardem/agentsoul#readme",
     "engines": {
         "node": ">=20"
     },

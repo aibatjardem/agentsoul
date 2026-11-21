@@ -1,9 +1,9 @@
 # AgentSoul
 
-[![npm version](https://img.shields.io/npm/v/@samiyev/agentsoul.svg?style=flat-square)](https://www.npmjs.com/package/@samiyev/agentsoul)
-[![CI](https://github.com/imfozilbek/agentsoul/actions/workflows/ci.yml/badge.svg)](https://github.com/imfozilbek/agentsoul/actions/workflows/ci.yml)
-[![license](https://img.shields.io/npm/l/@samiyev/agentsoul.svg?style=flat-square)](./LICENSE)
-[![node](https://img.shields.io/node/v/@samiyev/agentsoul.svg?style=flat-square)](https://nodejs.org)
+[![npm version](https://img.shields.io/npm/v/@aibatjardem/agentsoul.svg?style=flat-square)](https://www.npmjs.com/package/@aibatjardem/agentsoul)
+[![CI](https://github.com/aibatjardem/agentsoul/actions/workflows/ci.yml/badge.svg)](https://github.com/aibatjardem/agentsoul/actions/workflows/ci.yml)
+[![license](https://img.shields.io/npm/l/@aibatjardem/agentsoul.svg?style=flat-square)](./LICENSE)
+[![node](https://img.shields.io/node/v/@aibatjardem/agentsoul.svg?style=flat-square)](https://nodejs.org)
 
 Переиспользуемый soul-kit для Claude Code: идентичность, философия, справочные гайды и команда специалистов. Ставится в любой проект одной командой, безопасно обновляется и проверяет сам себя.
 
@@ -26,7 +26,7 @@
 ## Установка
 
 ```bash
-npm install -D @samiyev/agentsoul
+npm install -D @aibatjardem/agentsoul
 npx agentsoul profiles                     # blank | node-api | nextjs-prisma
 npx agentsoul init --profile node-api      # --dry-run, чтобы сначала посмотреть план
 ```
@@ -53,7 +53,7 @@ npx agentsoul init --profile node-api      # --dry-run, чтобы сначал�
 ## Обновление
 
 ```bash
-npm update @samiyev/agentsoul
+npm update @aibatjardem/agentsoul
 npx agentsoul update --dry-run    # план: что обновится, что останется, где конфликт
 npx agentsoul update
 ```
@@ -70,7 +70,15 @@ npx agentsoul update
 
 Конфликт разрешается так: слей нужное (проектные правила — в `.soul/local/`), затем `npx agentsoul update --resolve <path>`. Или `--force` — взять версию kit для всех конфликтов. Всё перезаписанное или удалённое сохраняется в `.soul/.backup/<timestamp>/`.
 
-**Миграция с 0.1.x** выполняется той же командой `update`. В пакете есть таблица хешей файлов из релизов 0.1.0/0.1.1, поэтому нетронутые файлы обновятся чисто, а в конфликт попадут только реально изменённые. Агенты-гайды из 0.1 удаляются (теперь это skills), `scripts/check-soul.sh` тоже (валидатор теперь в CLI).
+**Миграция с 0.1.x.** Версии 0.1.x выходили под именем `@samiyev/agentsoul`, поэтому сначала смени пакет:
+
+```bash
+npm uninstall @samiyev/agentsoul
+npm install -D @aibatjardem/agentsoul
+npx agentsoul update --dry-run && npx agentsoul update
+```
+
+Сама миграция выполняется той же командой `update`. В пакете есть таблица хешей файлов из релизов 0.1.0/0.1.1, поэтому нетронутые файлы обновятся чисто, а в конфликт попадут только реально изменённые. Агенты-гайды из 0.1 удаляются (теперь это skills), `scripts/check-soul.sh` тоже (валидатор теперь в CLI).
 
 ## Модели субагентов
 
@@ -135,6 +143,10 @@ core/
 
 AgentSoul установлен сам в себя (dogfood): `.soul/` и `.claude/` в корне — результат `npm run dogfood`, а правила работы с репозиторием лежат в `.soul/local/dogfood.md`.
 
+## Происхождение
+
+Проект вырос из [imfozilbek/agentsoul](https://github.com/imfozilbek/agentsoul) (автор — samiyev, пакет `@samiyev/agentsoul` 0.1.x). Начиная с 0.2 это самостоятельная переработка: три слоя вместо одних субагентов, безопасное обновление по манифесту, локальные правила, профили, валидатор на TypeScript. Философия и тексты агентов исходного проекта сохранены.
+
 ## Лицензия
 
-MIT.
+MIT — см. [LICENSE](./LICENSE). Копирайт исходного автора сохранён.

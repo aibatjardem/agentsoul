@@ -7,7 +7,7 @@ on:
 
 jobs:
     publish:
-        name: Publish @samiyev/agentsoul
+        name: Publish @aibatjardem/agentsoul
         runs-on: ubuntu-latest
         permissions:
             contents: read
