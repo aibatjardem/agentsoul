@@ -1,51 +1,69 @@
 #!/usr/bin/env node
 import { Command } from "commander"
-import { runInit } from "./commands/init.js"
 import { runCheck } from "./commands/check.js"
+import { runInit } from "./commands/init.js"
 import { runUpdate } from "./commands/update.js"
+import { loadKit, DEFAULT_PROFILE } from "./kit/kit.js"
+import { defaultCoreDir, packageVersion } from "./kit/paths.js"
+
+const version = packageVersion()
+const coreDir = defaultCoreDir()
+
+/** Runs a command and turns thrown errors into a readable message + exit code 1. */
+function run(name: string, fn: () => number): void {
+    try {
+        process.exitCode = fn()
+    } catch (err) {
+        console.error(`❌ ${name} failed: ${(err as Error).message}`)
+        process.exitCode = 1
+    }
+}
+
+const collect = (value: string, previous: string[]): string[] => [...previous, value]
 
 const program = new Command()
-
-program
     .name("agentsoul")
-    .description("Reusable soul-kit for Claude Code projects — identity, knowledge guides, 25+ subagents")
-    .version("0.1.0")
+    .description("Soul-kit for Claude Code: soul (always loaded) → skills (on demand) → subagents (isolated executors)")
+    .version(version)
 
 program
     .command("init")
-    .description("Install AgentSoul into a target project (safe by default — skips existing files)")
-    .option("-t, --target <path>", "Target project directory", process.cwd())
-    .option("-f, --force", "Overwrite existing files", false)
-    .action((opts: { target: string; force: boolean }) => {
-        try {
-            runInit({ target: opts.target, force: opts.force })
-        } catch (err) {
-            console.error(`❌ init failed: ${(err as Error).message}`)
-            process.exit(1)
-        }
-    })
-
-program
-    .command("check")
-    .description("Run soul-kit consistency validation in the target project")
-    .option("-t, --target <path>", "Target project directory", process.cwd())
-    .action((opts: { target: string }) => {
-        const code = runCheck({ target: opts.target })
-        process.exit(code)
-    })
+    .description("Install into a project. Never overwrites existing files")
+    .option("-t, --target <path>", "target project directory", process.cwd())
+    .option("-p, --profile <name>", "stack profile that pre-fills .soul/stack.md (see `agentsoul profiles`)", DEFAULT_PROFILE)
+    .option("-n, --dry-run", "show the plan without writing", false)
+    .action((o: { target: string; profile: string; dryRun: boolean }) =>
+        run("init", () => runInit({ ...o, coreDir, version })),
+    )
 
 program
     .command("update")
-    .description("Update AgentSoul core files in the target project (preserves stack.md/glossary.md)")
-    .option("-t, --target <path>", "Target project directory", process.cwd())
-    .option("-f, --force", "Actually perform the update (without this flag, dry-run warning only)", false)
-    .action((opts: { target: string; force: boolean }) => {
-        try {
-            runUpdate({ target: opts.target, force: opts.force })
-        } catch (err) {
-            console.error(`❌ update failed: ${(err as Error).message}`)
-            process.exit(1)
-        }
-    })
+    .description("Update managed files; keeps local edits, writes *.agentsoul-new on conflict")
+    .option("-t, --target <path>", "target project directory", process.cwd())
+    .option("-n, --dry-run", "show the plan without writing", false)
+    .option("-f, --force", "replace locally edited managed files with the kit version (backed up first)", false)
+    .option("-r, --resolve <path>", "accept your merged version of a conflicted file (repeatable)", collect, [])
+    .action((o: { target: string; dryRun: boolean; force: boolean; resolve: string[] }) =>
+        run("update", () => runUpdate({ ...o, coreDir, version })),
+    )
+
+program
+    .command("check")
+    .description("Validate an installed project against its manifest")
+    .option("-t, --target <path>", "target project directory", process.cwd())
+    .option("--source", "validate the kit sources in core/ instead (for AgentSoul's own CI)", false)
+    .action((o: { target: string; source: boolean }) => run("check", () => runCheck({ ...o, coreDir, version })))
+
+program
+    .command("profiles")
+    .description("List stack profiles")
+    .action(() =>
+        run("profiles", () => {
+            for (const p of loadKit(coreDir).profiles.values()) {
+                console.log(`  ${p.name.padEnd(16)} ${p.description}${p.name === DEFAULT_PROFILE ? "  (default)" : ""}`)
+            }
+            return 0
+        }),
+    )
 
 program.parse()

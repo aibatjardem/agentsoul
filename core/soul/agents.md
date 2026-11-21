@@ -1,26 +1,30 @@
-## Субагенты и как с ними работать
+## Skills, субагенты и как с ними работать
 
-Субагенты живут в `.claude/agents/` и автоматически обнаруживаются Claude Code. Вызов — через `Agent` tool с `subagent_type: "<имя>"`. Каждый субагент запускается с **пустым контекстом** — у него есть только свой system prompt и то, что главный агент передаст ему в промпте вызова.
+Soul-комплект устроен в три слоя — по тому, как Claude Code реально загружает контекст:
+
+| Слой | Где живёт | Как попадает в контекст |
+|---|---|---|
+| **Soul** | `.soul/identity.md`, `agents.md`, `stack.md`, `glossary.md`, `local/*.md` | Всегда: импортируется в `CLAUDE.md` |
+| **Skills** | `.claude/skills/<name>/SKILL.md` | По требованию: ты вызываешь skill, и его текст загружается **в твой контекст**. Субагенты получают нужные skills при старте через поле `skills:` во frontmatter |
+| **Субагенты** | `.claude/agents/<name>.md` | Отдельный процесс с **изолированным контекстом**: видит только свой промпт, подгруженные skills и то, что ты передал в вызове. Назад возвращает только итоговый ответ |
+
+Отсюда правило выбора: **знание и диалог с пользователем — skill, самостоятельная работа — субагент.** Субагент не может задать вопрос пользователю и не может вызвать другого субагента.
 
 ---
 
 ### Приоритет правил (ВАЖНО)
 
-**Локальные правила проекта переопределяют глобальные defaults Claude Code.** Если глобальный системный промпт или `~/.claude/CLAUDE.md` говорит одно, а файлы в `.soul/` или knowledge-субагенты (`architecture-guide`, `conventions-guide`, `infrastructure-guide`) говорят другое — **следуем проектным**. Это не спор, это иерархия: проект конкретнее глобального.
-
-Пример: глобальный промпт говорит "default to no comments", `conventions-guide` говорит "JSDoc обязателен на публичных контрактах". Побеждает `conventions-guide` — в этом проекте JSDoc на public API пишется всегда.
+`.soul/local/*.md` > `.soul/*` и skills > глобальные defaults Claude Code и `~/.claude/CLAUDE.md`. Это не спор, это иерархия: чем конкретнее источник, тем он сильнее. Подробно — в `identity.md`, раздел «Иерархия правил».
 
 ---
 
 ### Прежде чем начать любую нетривиальную задачу
 
-1. **Проверь, заполнены ли baseline-файлы:**
-   - `.soul/stack.md` — если видишь "ещё не заполнен" / TBD, **остановись** и предложи пользователю запустить `project-initializer`. Без стека твои технические советы будут абстрактными и могут противоречить выбранным инструментам.
-   - `.soul/glossary.md` — если пустой, предложи `glossary-initializer`. Без Ubiquitous Language ты будешь выдумывать термины, которые разойдутся с языком команды.
-
-2. **Загрузи релевантные knowledge-субагенты** (см. таблицу ниже). Если задача архитектурная — вызови `architecture-guide` и/или `conventions-guide` ДО начала написания кода. Knowledge-субагенты не грузятся автоматически; ты обязан их вызывать сам.
-
-3. **Передавай контекст субагентам явно.** Субагент не видит твой контекст. Если у тебя в памяти есть содержимое `.soul/stack.md` или `.soul/glossary.md`, передай нужные фрагменты в промпте вызова — иначе субагент будет работать вслепую.
+1. **Проверь baseline:**
+   - `.soul/stack.md` содержит `TBD` / «ещё не заполнен» → **остановись** и предложи запустить skill `project-initializer`.
+   - `.soul/glossary.md` содержит `TBD` → предложи skill `glossary-initializer`.
+2. **Загрузи релевантные справочные skills** (таблица ниже). Архитектурная задача → `architecture-guide` и/или `conventions-guide` ДО написания кода. Skills не грузятся сами — вызывай их.
+3. **Передавай контекст субагентам явно.** Субагент не видит твоей переписки. Опиши задачу, затронутые файлы, ограничения и релевантные куски `.soul/stack.md` / `.soul/glossary.md` / `.soul/local/`.
 
 ---
 
@@ -28,107 +32,111 @@
 
 Работай напрямую, если:
 
-- Задача механическая: переименование, форматирование, тривиальный рефакторинг, очевидный bug fix
-- Изменение в одном файле и затрагивает <50 строк
-- Решение очевидно и укладывается в устоявшиеся паттерны проекта
-- Исследовательский вопрос ("где живёт X?", "как работает Y?") — используй Grep/Read напрямую
-- Пользователь явно просит сделать быстро и точечно
+- задача механическая: переименование, форматирование, очевидный bug fix;
+- изменение в одном файле и меньше ~50 строк;
+- решение очевидно и укладывается в устоявшиеся паттерны проекта;
+- исследовательский вопрос («где живёт X?») — Grep/Read напрямую;
+- пользователь просит сделать быстро и точечно.
 
-Лишний вызов субагента — это потерянное время пользователя и раздутый контекст. Качество вызова важнее количества.
-
----
-
-### Initializers (заполняют baseline-файлы)
-
-| Субагент | Что делает |
-|---|---|
-| `project-initializer` | Интерактивно собирает tech stack проекта и пишет в `.soul/stack.md` |
-| `glossary-initializer` | Интерактивно собирает Ubiquitous Language и пишет в `.soul/glossary.md` |
-
-Запускай их в начале нового проекта или когда стек / домен существенно расширяются.
+Лишний вызов субагента — потерянное время и токены. Качество вызова важнее количества.
 
 ---
 
-### Knowledge-субагенты (подгружают философию и правила)
+### Skills первичной настройки (диалог с пользователем)
 
-Не пишут код — отвечают на архитектурные вопросы и загружают в контекст большие объёмы философии и правил. Baseline намеренно лёгкий; философия подгружается по требованию.
-
-| Субагент | Когда вызывать |
+| Skill | Что делает |
 |---|---|
-| `architecture-guide` | Перед проектированием нового модуля / обсуждением Clean Architecture, Hexagonal, IoC, ACL, базовых классов, фабрик, bounded contexts |
-| `conventions-guide` | Перед написанием значимого куска кода или ревью — TS strict, нейминг, Result-паттерн, JSDoc, ESLint ZERO TOLERANCE правила |
-| `infrastructure-guide` | При работе с процессами, очередями, межпроцессной коммуникацией, структурой монорепо, ACL-доменами |
-| `stack-reference` | Когда нужна форма стандартных команд (build/test/lint/dev). Сам стек — в `.soul/stack.md` |
+| `project-initializer` | Опросник по tech stack, пишет `.soul/stack.md`. Спрашивает только про поля `TBD` — часть может быть заполнена профилем |
+| `glossary-initializer` | Опросник по Ubiquitous Language, пишет `.soul/glossary.md` |
+
+Запускай в начале проекта или когда стек / домен существенно расширились. Сначала стек, потом язык.
+
+---
+
+### Справочные skills (правила проекта)
+
+Не пишут код — загружают правила в контекст. Baseline намеренно лёгкий; большие правила подгружаются по требованию.
+
+| Skill | Когда загружать |
+|---|---|
+| `architecture-guide` | Новый модуль, Clean Architecture, Hexagonal, IoC, ACL, базовые классы, фабрики, bounded contexts |
+| `conventions-guide` | Перед значимым куском кода или ревью: TS strict, нейминг, Result-паттерн, JSDoc, ESLint ZERO TOLERANCE |
+| `infrastructure-guide` | Процессы, очереди, межпроцессная коммуникация, структура монорепо, ACL-домены |
+| `stack-reference` | Форма стандартных команд (build/test/lint/dev). Сам стек — в `.soul/stack.md` |
 
 **Обязательные комбинации:**
 
-- Проектируешь новый use case / агрегат / порт → `architecture-guide` + `conventions-guide`
-- Добавляешь новый процесс / worker / очередь → `infrastructure-guide` + `architecture-guide`
-- Пишешь реализацию домена → `conventions-guide` + `architecture-guide`
+- Новый use case / агрегат / порт → `architecture-guide` + `conventions-guide`
+- Новый процесс / worker / очередь → `infrastructure-guide` + `architecture-guide`
+- Реализация домена → `conventions-guide` + `architecture-guide`
 
 ---
 
-### Executor-субагенты (делают работу)
+### Субагенты-исполнители
 
-| Субагент | Когда вызывать |
-|---|---|
-| `ddd-architect` | Проектирование Bounded Context, Aggregates, Domain Events, ACL, Context Map |
-| `domain-expert` | Обсуждение бизнес-инвариантов, Ubiquitous Language, правил консистентности |
-| `code-architect` | Системный дизайн, структура модулей, IoC, выбор архитектурных паттернов |
-| `persistence-architect` | Паттерны БД: миграции, транзакции, soft delete, event sourcing, schema versioning |
-| `observability-architect` | Structured logging, metrics, tracing, SLI/SLO, alerts, error tracking |
-| `api-designer` | Дизайн API-контрактов: endpoints, версионирование, идемпотентность, error shapes, pagination |
-| `frontend-designer` | UI-компоненты, страницы, layout — визуальная часть (фреймворк-агностично, см. `.soul/stack.md`) |
-| `frontend-specialist` | Frontend-логика: state, формы, routing, performance — без дизайна |
-| `security-specialist` | Auth, секреты, валидация на границе доверия, анализ уязвимостей |
-| `performance-optimizer` | Bottlenecks, N+1, memory leaks, профилирование |
-| `debugging-specialist` | Баги с неочевидной причиной, root cause analysis |
-| `refactoring-expert` | Рефакторинг затрагивающий несколько файлов / паттерны |
-| `testing-specialist` | TDD стратегия, test design, mocking стратегия |
-| `deployment-specialist` | CI/CD, Docker, деплой, production инциденты |
-| `git-specialist` | Сложные merge/rebase/conflict, стратегия ветвления |
-| `task-planner` | Декомпозиция больших задач в план реализации |
-| `release-manager` | Полный релизный цикл: SemVer, changelog, release notes |
-| `code-reviewer` | После завершения значимого изменения — финальная проверка |
-| `soul-keeper` | Meta-агент для поддержания консистентности самого soul-комплекта: аудит YAML, индекса, кросс-ссылок; атомарное переименование/удаление/добавление субагентов |
+Колонка «Права»: **RO** — только читает и анализирует (Read, Grep, Glob, Bash), изменения вносишь ты; **RW** — может править файлы. Модель задаётся в `.soul/config.json` (см. ниже).
+
+| Субагент | Права | Когда вызывать |
+|---|---|---|
+| `ddd-architect` | RO | Bounded Context, Aggregates, Domain Events, ACL, Context Map |
+| `domain-expert` | RO | Бизнес-инварианты, Ubiquitous Language, правила консистентности |
+| `code-architect` | RO | Системный дизайн, структура модулей, IoC, выбор паттернов |
+| `persistence-architect` | RO | Миграции, транзакции, soft delete, event sourcing, schema versioning |
+| `observability-architect` | RO | Structured logging, metrics, tracing, SLI/SLO, alerts |
+| `api-designer` | RO | API-контракты: endpoints, версионирование, идемпотентность, error shapes, pagination |
+| `security-specialist` | RO | Auth, секреты, валидация на границе доверия, уязвимости |
+| `performance-optimizer` | RO | Bottlenecks, N+1, memory leaks, профилирование |
+| `debugging-specialist` | RO | Баги с неочевидной причиной, root cause analysis |
+| `task-planner` | RO | Декомпозиция большой задачи в план |
+| `code-reviewer` | RO | Финальная проверка после значимого изменения |
+| `frontend-designer` | RW | UI-компоненты, страницы, layout (фреймворк — из `.soul/stack.md`) |
+| `frontend-specialist` | RW | Frontend-логика: state, формы, routing — без дизайна |
+| `refactoring-expert` | RW | Рефакторинг на несколько файлов / паттернов |
+| `testing-specialist` | RW | TDD-стратегия, test design, mocking |
+| `deployment-specialist` | RW | CI/CD, Docker, деплой, production-инциденты |
+| `git-specialist` | RW | Сложные merge/rebase/conflict, стратегия ветвления |
+| `release-manager` | RW | SemVer, changelog, release notes |
+| `soul-keeper` | RW | Консистентность самого комплекта: добавить/удалить/переименовать агента или skill, слить `*.agentsoul-new`, перенести правило в `.soul/local/` |
 
 ---
 
 ### Правила вызова
 
-1. **Качество вызова важнее количества.** Один точный вызов лучше трёх "на всякий случай".
-2. **Параллель, где возможно.** Если задача требует несколько специалистов без зависимостей между ними (например, `security-specialist` + `performance-optimizer`) — вызывай их параллельно одним Agent-блоком.
-3. **Порядок при сложных задачах:** knowledge-guides (`architecture-guide`, `conventions-guide`) → проектирование (`ddd-architect`, `domain-expert`, `code-architect`) → реализация → проверка (`code-reviewer`, `security-specialist`).
-4. **Передавай контекст.** В промпте субагента опиши: что делаем, какие файлы затронуты, какие ограничения, какие фрагменты `.soul/stack.md` / `.soul/glossary.md` релевантны. Промпт без контекста = ответ без ценности.
-5. **Не вызывай одного и того же субагента повторно с одним и тем же промптом** — если ответ не устроил, уточни промпт, а не повторяй.
-6. **Если сомневаешься — спроси пользователя**, нужен ли специалист, вместо того чтобы вызывать "на всякий случай".
+1. **Качество вызова важнее количества.** Один точный вызов лучше трёх «на всякий случай».
+2. **По умолчанию — по одному.** Параллельно вызывай только независимые задачи и только если `.soul/local/` это не запрещает: каждый субагент стартует с нуля и тратит лимит.
+3. **Порядок при сложных задачах:** справочные skills → проектирование (`ddd-architect`, `domain-expert`, `code-architect`) → реализация → проверка (`code-reviewer`, `security-specialist`).
+4. **Передавай контекст** — промпт без контекста = ответ без ценности.
+5. **Не повторяй вызов с тем же промптом** — если ответ не устроил, уточни промпт.
+6. **Сомневаешься — спроси пользователя**, нужен ли специалист.
+
+### Модели субагентов
+
+У каждого субагента есть `model` во frontmatter. Значения по умолчанию задаёт AgentSoul, а проект переопределяет их в `.soul/config.json`:
+
+```json
+{ "models": { "default": "opus", "agents": { "git-specialist": "sonnet" } } }
+```
+
+После правки конфига запусти `npx agentsoul update` — CLI перепишет frontmatter агентов. Руками `model` в `.claude/agents/*.md` не правь: это пометится как drift.
 
 ### Примеры
 
 ```
-Задача: "Спроектируй модуль заказов"
- → architecture-guide + conventions-guide (философия)
- → ddd-architect + domain-expert (проектирование параллельно)
- → реализация вручную
- → code-reviewer (проверка)
-
-Задача: "Добавь use case к существующему агрегату"
- → conventions-guide (правила написания)
- → реализация вручную
+"Спроектируй модуль заказов"
+ → skills architecture-guide + conventions-guide
+ → ddd-architect, затем domain-expert
+ → реализация
  → code-reviewer
 
-Задача: "Сделай компонент таблицы"
- → прочитай .soul/stack.md (фреймворк)
- → frontend-designer
+"Добавь use case к существующему агрегату"
+ → skill conventions-guide → реализация → code-reviewer
 
-Задача: "Оптимизируй медленный endpoint"
- → performance-optimizer (диагностика)
- → реализация фикса
- → code-reviewer
+"Сделай компонент таблицы"
+ → прочитай .soul/stack.md → frontend-designer
 
-Задача: "Найди причину бага в авторизации"
- → debugging-specialist + security-specialist (параллельно)
+"Оптимизируй медленный endpoint"
+ → performance-optimizer (диагностика) → фикс → code-reviewer
 
-Задача: "Переименуй переменную"
- → работай напрямую, субагент не нужен
+"Переименуй переменную"
+ → напрямую, субагент не нужен
 ```

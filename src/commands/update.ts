@@ -1,84 +1,61 @@
-import { resolve, join } from "node:path"
-import { resolveCoreDir } from "../lib/paths.js"
-import { copyTree } from "../lib/fs-ops.js"
+import { resolve } from "node:path"
+import { applyPlan, planInstall } from "../kit/install.js"
+import { loadKit } from "../kit/kit.js"
+import { readManifest } from "../kit/manifest.js"
+import { printFollowUps, printPlan } from "./report.js"
 
-interface UpdateOptions {
-    target: string
-    force: boolean
+export interface UpdateOptions {
+    readonly target: string
+    readonly coreDir: string
+    readonly version: string
+    readonly force: boolean
+    readonly dryRun: boolean
+    readonly resolve: readonly string[]
 }
 
 /**
- * Обновляет файлы ядра AgentSoul в целевом проекте, но НЕ трогает project-specific.
+ * Brings managed files up to the current kit, re-renders agent models from
+ * `.soul/config.json` and refreshes the CLAUDE.md block. Project-owned files
+ * (stack.md, glossary.md, config.json, local/) are never touched; locally
+ * edited managed files are never overwritten without --force.
  *
- * Обновляет:
- *   - .soul/identity.md, .soul/agents.md, .soul/README.md
- *   - .claude/agents/*
- *   - scripts/check-soul.sh
- *
- * НЕ обновляет (project-specific, пользователь владеет):
- *   - .soul/stack.md
- *   - .soul/glossary.md
- *   - CLAUDE.md
- *
- * Без --force останавливается, если обнаружит локальные изменения в ядре.
+ * @returns process exit code: 0 clean, 2 when conflicts are left to resolve
  */
-export function runUpdate(options: UpdateOptions): void {
-    const core = resolveCoreDir()
+export function runUpdate(options: UpdateOptions): number {
     const target = resolve(options.target)
-
-    console.log(`AgentSoul update → ${target}`)
-    console.log(`  core: ${core}`)
-    console.log(`  mode: ${options.force ? "force overwrite" : "safe (check then overwrite)"}`)
-    console.log("")
-
-    // В safe-режиме мы всё равно перезаписываем, но предупреждаем что локальные правки будут потеряны.
-    // Продвинутая версия могла бы делать diff и 3-way merge, но для MVP достаточно overwrite + force flag.
-    if (!options.force) {
-        console.log("⚠  Update will overwrite files in .soul/ (except stack.md/glossary.md)")
-        console.log("   and .claude/agents/. Local changes to these files will be lost.")
-        console.log("   Pass --force to proceed, or cancel with Ctrl-C.")
-        console.log("")
-        console.log("   To keep local overrides, use .soul/overrides/ (not yet implemented).")
-        console.log("")
-        console.log("❌ aborted (no --force)")
-        return
+    const manifest = readManifest(target)
+    const kit = loadKit(options.coreDir)
+    const plan = planInstall({
+        kit,
+        target,
+        version: options.version,
+        force: options.force,
+        resolve: options.resolve,
+    })
+    if (manifest === null && !plan.legacy) {
+        console.error("❌ AgentSoul is not installed here. Use `agentsoul init`.")
+        return 1
     }
 
-    // Обновляем только core-файлы, оставляя stack.md/glossary.md нетронутыми
-    const coreBaselineFiles = ["identity.md", "agents.md", "README.md"]
+    const from = manifest?.version ?? "0.1.x (no manifest)"
+    console.log(`AgentSoul update ${from} → ${options.version}  ${target}`)
+    console.log("")
+    printPlan(plan)
 
-    for (const f of coreBaselineFiles) {
-        const src = join(core, "soul", f)
-        const dst = join(target, ".soul", f)
-        const { existsSync, copyFileSync } = require("node:fs") as typeof import("node:fs")
-        if (existsSync(src)) {
-            copyFileSync(src, dst)
-            console.log(`  .soul/${f}  updated`)
-        }
+    if (options.dryRun) {
+        printFollowUps(plan)
+        console.log("")
+        console.log("dry run — nothing written")
+        return 0
     }
-
-    const agentsResult = copyTree(
-        join(core, "claude-agents"),
-        join(target, ".claude", "agents"),
-        "overwrite",
-    )
-    console.log(
-        `  .claude/agents/  updated ${agentsResult.copied.length + agentsResult.overwritten.length} file(s)`,
-    )
-
-    const scriptsResult = copyTree(
-        join(core, "scripts"),
-        join(target, "scripts"),
-        "overwrite",
-    )
-    console.log(
-        `  scripts/  updated ${scriptsResult.copied.length + scriptsResult.overwritten.length} file(s)`,
-    )
-
+    const { backupDir } = applyPlan(plan, target)
+    const conflicts = printFollowUps(plan)
+    if (backupDir !== null) {
+        console.log("")
+        console.log(`ℹ  previous versions of replaced/removed files: ${backupDir}`)
+    }
     console.log("")
-    console.log("✅ AgentSoul core updated")
-    console.log("")
-    console.log("Next steps:")
-    console.log("  1. Run `bash scripts/check-soul.sh` to verify consistency")
-    console.log("  2. Restart Claude Code if subagent definitions changed")
+    console.log(conflicts === 0 ? "✅ up to date" : `⚠  updated with ${conflicts} conflict(s) to resolve`)
+    console.log("   Restart Claude Code if agents or skills changed.")
+    return conflicts === 0 ? 0 : 2
 }

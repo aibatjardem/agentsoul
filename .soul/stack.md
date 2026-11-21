@@ -1,11 +1,11 @@
 ## Tech Stack — AgentSoul
 
-> Это **реальный** stack.md проекта AgentSoul (dogfood). Он не является шаблоном. Шаблон живёт в `core/soul/stack.md` и копируется в проекты-консьюмеры через `agentsoul init`.
+> Это **реальный** stack.md проекта AgentSoul (dogfood). Он не является шаблоном. Шаблоны живут в `core/profiles/*/stack.md` и копируются в проекты-консьюмеры через `agentsoul init --profile`.
 
 ### Базовое
 
 - **Название:** AgentSoul
-- **Описание:** Переиспользуемый soul-kit (идентичность + философия + 25+ субагентов) для Claude Code проектов. Устанавливается в любой проект через CLI.
+- **Описание:** Переиспользуемый soul-kit для Claude Code: soul (всегда в контексте) → skills (гайды и опросники, по требованию) → субагенты (изолированные исполнители). CLI ставит, безопасно обновляет и валидирует.
 - **Domain:** developer tooling / меta-программирование Claude Code
 - **Тип:** отдельный пакет (не монорепо)
 
@@ -22,14 +22,15 @@
 - **Module system:** ESM (`type: module`)
 - **HTTP framework:** N/A (не веб-сервис)
 - **DI:** N/A (простая CLI, DI не нужен)
-- **Validation:** N/A (в первой версии; возможно zod позже для CLI args)
+- **Validation:** ручные type guards на границе (config.json, manifest, frontmatter); YAML — пакет `yaml`
 - **Logger:** `console.*` внутри CLI (это tool для разработчика, не прод-сервис)
-- **Config:** N/A
+- **Config:** `.soul/config.json` в целевом проекте (профиль, модели субагентов)
 
 ### Данные
 
 - **DB:** N/A (stateless CLI)
 - **Файлы:** файловая система — основной "store", операции через `node:fs`
+- **Состояние установки:** манифест `.soul/.agentsoul.json` (версия, профиль, sha256 управляемых файлов)
 - **Cache:** N/A
 
 ### Асинхронность
@@ -48,8 +49,8 @@
 
 ### Качество
 
-- **Test runner:** TBD (планируется Vitest или node:test)
-- **E2E:** TBD (планируются snapshot-тесты команды init против temp-директорий)
+- **Test runner:** node:test (без зависимостей), тесты в `test/*.test.mjs` против `dist/`
+- **E2E:** сценарные тесты init/update/check против temp-директорий и копии `core/`
 - **Linter:** ESLint (+ `@typescript-eslint`)
 - **Formatter:** Prettier (см. `conventions-guide`)
 - **Type checker:** tsc
@@ -63,13 +64,15 @@
 
 ### Деплой
 
-- **Hosting:** npm registry (public) — планируется
+- **Hosting:** npm registry (public)
 - **Container:** N/A
-- **CI/CD:** GitHub Actions — планируется (build + publish on tag)
+- **CI/CD:** GitHub Actions: typecheck → build → test → check --source → check (dogfood); publish on tag
 
 ### Решения и обоснования
 
 - **Почему commander, а не yargs/meow/clipanion:** минимальные зависимости, хорошая TS-поддержка, стандарт де-факто в Node экосистеме для CLI такого размера.
 - **Почему ESM, а не CommonJS:** Node ≥20 полноценно поддерживает ESM, новые проекты не должны наследовать CJS legacy.
-- **Почему нет DI:** CLI с 3 командами не нуждается в композитном корне. Если вырастет — пересмотрим.
+- **Почему нет DI:** CLI с 4 командами не нуждается в композитном корне. Источник kit передаётся параметром (`loadKit(coreDir)`), этого достаточно для тестов.
+- **Почему хеши, а не копии для трёхстороннего слияния:** решение «обновить / оставить локальное / конфликт» требует только сравнения хешей диска, базы и новой версии. Само слияние текста — работа человека (или `soul-keeper`), CLI его не угадывает.
+- **Почему валидатор в CLI, а не bash + Python:** одна среда исполнения (Node), без `pyyaml`, и строгая проверка по манифесту вместо эвристик по суффиксам имён.
 - **Почему файлы, а не БД:** AgentSoul — это набор markdown-файлов, который КОПИРУЕТСЯ в проекты. Никакого state за пределами файловой системы нет и не должно быть.

@@ -1,107 +1,160 @@
 ## Глоссарий — Ubiquitous Language AgentSoul
 
-> Это **реальный** glossary.md проекта AgentSoul (dogfood). Шаблон-placeholder живёт в `core/soul/glossary.md` и копируется в проекты-консьюмеры через `agentsoul init`.
+> Это **реальный** glossary.md проекта AgentSoul (dogfood). Шаблон-placeholder живёт в `core/seed/glossary.md` и копируется в проекты-консьюмеры через `agentsoul init`.
 
 ### Bounded Contexts
 
-- **`Core`** — переиспользуемый контент soul-комплекта: markdown-файлы baseline'а, субагенты, валидационный скрипт. Это "данные" AgentSoul, которые копируются в проекты-консьюмеры.
-- **`CLI`** — TypeScript-код, который читает `Core` и копирует его в целевой проект. Три команды: `init`, `check`, `update`.
-- **`Dogfood`** — сам AgentSoul как проект-консьюмер своего же `Core`. `.soul/` и `.claude/agents/` в корне AgentSoul — это применение AgentSoul к самому себе.
+- **`Core`** — переиспользуемый контент soul-комплекта в `core/`: soul-файлы, skills, агенты, seed-файлы, профили, таблица хешей 0.1. Это «данные» AgentSoul.
+- **`CLI`** — TypeScript-код, который читает `Core`, рендерит его под конфиг проекта и устанавливает, обновляет и валидирует. Команды: `init`, `update`, `check`, `profiles`.
+- **`Dogfood`** — сам AgentSoul как проект-консьюмер своего `Core`, установленный командой `npm run dogfood`.
 
 ### Context Map
 
-- `CLI` → `Core`: **Customer-Supplier.** CLI читает файлы `Core`, но не меняет их. `Core` — supplier, CLI — customer.
-- `Dogfood` → `Core`: **Shared Kernel.** Dogfood — это "зеркало" `Core` для самопотребления. Все правки проходят через `Core`, потом синхронизируются в `Dogfood`.
-- `Dogfood` → `CLI`: через `Core`. Dogfood не вызывает CLI напрямую, но пользуется `scripts/check-soul.sh` для валидации.
+- `CLI` → `Core`: **Customer-Supplier.** CLI читает `Core`, но не меняет его.
+- `Dogfood` → `CLI`: **Conformist.** Dogfood получает свои файлы только через `agentsoul update`, как любой консьюмер. Ручной синхронизации нет.
 
 ---
 
 ## Термины
 
-### Core
+### Layer (слой)
 
 **Контекст:** `Core`
-**Тип:** Concept (не Entity)
 
-**Определение** — переиспользуемая "начинка" AgentSoul: `core/soul/*` (baseline markdown), `core/claude-agents/*` (субагенты), `core/scripts/*` (утилиты). То, что копируется в целевой проект при `agentsoul init`.
+**Определение** — способ, которым содержимое попадает в контекст Claude Code. Слоёв три: **Soul** (всегда, через импорт в `CLAUDE.md`), **Skill** (по требованию, в контекст вызывающего), **Subagent** (изолированный процесс).
+
+**Инварианты:**
+- Знание и диалог с пользователем — skill, самостоятельная работа — субагент. Субагент не может спросить пользователя и не может вызвать другого субагента.
 
 ---
 
-### Baseline (файлы)
+### Soul (baseline)
 
 **Контекст:** `Core`
-**Тип:** Group of files
 
-**Определение** — файлы, которые в целевом проекте попадают в `.soul/` и всегда загружаются в контекст главного агента Claude Code через `CLAUDE.md` @imports. Состав: `identity.md`, `agents.md`, `stack.md`, `glossary.md`, `README.md`.
+**Определение** — файлы `.soul/`, которые всегда в контексте главного агента: `identity.md`, `agents.md`, `stack.md`, `glossary.md`, `local/*.md`.
 
 **Инварианты:**
-- Baseline всегда мал (~500 строк), иначе раздувает контекст каждой сессии
-- `stack.md` и `glossary.md` — project-specific, заполняются инициализаторами
-- Остальные — одинаковые для всех проектов-консьюмеров AgentSoul
+- Soul всегда мал, иначе раздувает каждую сессию. Большие правила живут в skills.
+
+---
+
+### Skill
+
+**Контекст:** `Core`
+
+**Определение** — `core/skills/<name>/SKILL.md` → `.claude/skills/<name>/SKILL.md`. Два рода: **справочный** (`architecture-guide`, `conventions-guide`, `infrastructure-guide`, `stack-reference`) и **опросник первичной настройки** (`project-initializer`, `glossary-initializer`).
+
+**Инварианты:**
+- `name` во frontmatter == имя каталога
+- Опросники выполняются в главном контексте и разговаривают через `AskUserQuestion`
 
 ---
 
 ### Subagent
 
 **Контекст:** `Core`
-**Тип:** Entity
 
-**Определение** — специализированный Claude-агент с собственным system prompt'ом, живущий в `core/claude-agents/<name>.md`. Вызывается главным агентом через Agent tool с `subagent_type: "<name>"`. Три рода: **executor** (делает работу), **knowledge-guide** (отвечает на архитектурные вопросы), **initializer** (заполняет baseline-файлы), плюс **meta** (`soul-keeper`).
+**Определение** — исполнитель `core/agents/<name>.md` → `.claude/agents/<name>.md`, вызывается через Agent tool. Права — **RO** (Read, Grep, Glob, Bash) или **RW** (+ Write, Edit). Нужные справочные skills подгружаются через поле `skills:`.
 
 **Инварианты:**
-- Имя файла == `name` в frontmatter (без `.md`)
-- Frontmatter содержит `name`, `description`, `tools` — проверяется `check-soul.sh`
-- `description` на английском (для семантического матчинга Claude Code)
-- Тело на русском (для консистентности с другими файлами AgentSoul)
+- Имя файла == `name` во frontmatter
+- Frontmatter: `name`, `description` (англ.), `tools` (непустой список известных инструментов), `model` (в `core/` обязателен), `skills` (только существующие skills)
+- Тело на русском
+- У каждого агента и skill есть ровно одна строка в таблицах `.soul/agents.md`
 
 ---
 
-### Initializer
-
-**Контекст:** `Core`
-**Тип:** Subagent subtype
-
-**Определение** — особый тип субагента, который **пишет** файлы в `.soul/`. Два варианта: `project-initializer` (заполняет `stack.md`) и `glossary-initializer` (заполняет `glossary.md`). Требуют `Write`/`Edit` tools.
-
----
-
-### CLI Command
+### Managed file (управляемый файл)
 
 **Контекст:** `CLI`
-**Тип:** Entity
 
-**Определение** — TypeScript-функция в `src/commands/<name>.ts`, экспортирующая `run<Name>(options)`. Обёрнута в commander-команду в `src/cli.ts`. Три команды: `init`, `check`, `update`.
+**Определение** — файл, которым владеет AgentSoul: `.soul/identity.md`, `agents.md`, `README.md`, `.claude/skills/**`, `.claude/agents/*` (с `model`, отрендеренной из конфига). Записан в манифест.
+
+**Инварианты:**
+- В проекте-консьюмере руками не правится; правка = **drift**
+
+---
+
+### Seed file (seed-файл)
+
+**Контекст:** `CLI`
+
+**Определение** — файл, которым после установки владеет проект: `.soul/stack.md` (из профиля), `glossary.md`, `config.json`, `local/rules.md`. Пишется, только если его нет. В манифест не попадает.
+
+---
+
+### Profile (профиль)
+
+**Контекст:** `Core`
+
+**Определение** — `core/profiles/<name>/`: заранее заполненный `stack.md` в формате `project-initializer` и описание. `blank` (по умолчанию), `node-api`, `nextjs-prisma`.
+
+---
+
+### Local rules (локальные правила)
+
+**Контекст:** `Core`
+
+**Определение** — `.soul/local/*.md`. Самый сильный слой правил: побеждает `.soul/*`, skills и глобальные defaults. Никогда не перезаписывается, импортируется в `CLAUDE.md` последним.
+
+---
+
+### Manifest (манифест)
+
+**Контекст:** `CLI`
+
+**Определение** — `.soul/.agentsoul.json`: версия AgentSoul, профиль и для каждого управляемого файла **base** — sha256 версии kit, последней принятой проектом.
+
+**Инварианты:**
+- Решение `update` по файлу: диск == новая версия → unchanged; диск == base → update; новая == base → keep-local; иначе → conflict (или overwrite с `--force`)
+- Неизвестный base записывается как `""` и никогда не совпадает с реальным хешем — файл нельзя перезаписать молча
+
+---
+
+### Conflict (конфликт)
+
+**Контекст:** `CLI`
+
+**Определение** — управляемый файл изменён локально, и kit тоже его изменил. Новая версия пишется рядом как `<file>.agentsoul-new`. Разрешается `agentsoul update --resolve <path>`.
+
+---
+
+### Backup (бэкап)
+
+**Контекст:** `CLI`
+
+**Определение** — `.soul/.backup/<timestamp>/`: копии всех файлов, которые `update` перезаписал с `--force` или удалил. Игнорируется git.
+
+---
+
+### Managed block (управляемый блок)
+
+**Контекст:** `CLI`
+
+**Определение** — фрагмент `CLAUDE.md` между `<!-- agentsoul:begin -->` и `<!-- agentsoul:end -->`: импорты soul и правило bootstrap. Перегенерируется при каждом `update`, текст вокруг не трогается.
+
+---
+
+### Legacy install (установка 0.1)
+
+**Контекст:** `CLI`
+
+**Определение** — проект с `.soul/`, но без манифеста. `update` мигрирует его, сверяя файлы с таблицей хешей релизов 0.1.x (`core/legacy/0.1.json`): совпавшие обновляются чисто, остальные считаются отредактированными.
 
 ---
 
 ### Target Project
 
 **Контекст:** `CLI`
-**Тип:** Concept
 
-**Определение** — проект-консьюмер AgentSoul. Произвольная директория, куда `agentsoul init` копирует core и создаёт `CLAUDE.md`. CLI взаимодействует с target project только через файловую систему, никаких других каналов нет.
-
----
-
-### Dogfood
-
-**Контекст:** `Dogfood`
-**Тип:** Concept
-
-**Определение** — `.soul/` и `.claude/agents/` в корне самого AgentSoul, которые зеркалят `core/soul/` и `core/claude-agents/` (с двумя исключениями: AgentSoul'овские stack.md и glossary.md не являются шаблонами, а содержат реальные данные проекта). Позволяет AgentSoul работать над собой, используя собственные правила и субагенты.
-
-**Инварианты:**
-- `.soul/identity.md` === `core/soul/identity.md`
-- `.soul/agents.md` === `core/soul/agents.md`
-- `.soul/README.md` === `core/soul/README.md`
-- `.claude/agents/*` === `core/claude-agents/*`
-- `.soul/stack.md` ≠ `core/soul/stack.md` (первый — реальный, второй — template)
-- `.soul/glossary.md` ≠ `core/soul/glossary.md` (первый — этот файл, второй — template)
+**Определение** — проект-консьюмер AgentSoul. CLI взаимодействует с ним только через файловую систему.
 
 ---
 
 ## Конфликты языка (одинаковые слова, разные смыслы)
 
-- **"Агент"** в контексте AgentSoul = **Subagent** (Claude-инстанс с system prompt'ом). Не путать с "AI Agent" в общем смысле.
-- **"Core"** в контексте AgentSoul = директория `core/` с переиспользуемым контентом. Не путать с "core domain" из DDD.
-- **"Soul"** = **Baseline**. "Soul-комплект" = baseline + субагенты. Не путать с "identity" (это только один из файлов soul'а).
+- **«Агент»** в контексте AgentSoul = **Subagent**. Не путать с «AI Agent» в общем смысле.
+- **«Core»** = директория `core/`. Не путать с «core domain» из DDD.
+- **«Soul»** = слой Soul (baseline). «Soul-комплект» = все три слоя вместе.
+- **«Guide»** раньше был субагентом, теперь это справочный **Skill**.
