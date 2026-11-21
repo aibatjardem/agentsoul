@@ -101,12 +101,14 @@ Claude спросит:
 
 Для сторонних маркетплейсов автообновление по умолчанию выключено. Включи его: `/plugin` → **Marketplaces** → **agentsoul** → **Auto-update**.
 
-Вручную:
+Вручную — в обычном терминале (не внутри Claude Code):
 
+```bash
+claude plugin marketplace update agentsoul
+claude plugin update agentsoul-ru@agentsoul
 ```
-/plugin marketplace update agentsoul
-/reload-plugins
-```
+
+Потом перезапусти Claude Code — новая версия подключается при старте. То же можно сделать в `/plugin`: выбери `agentsoul-ru` → **Update**.
 
 Обновление меняет только плагин. Папку `.soul/` в проектах оно не трогает.
 

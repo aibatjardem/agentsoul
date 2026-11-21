@@ -34,6 +34,7 @@ MSG_READ="Read these files before any non-trivial task."
 MSG_LOCAL="Local rules (strongest layer):"
 MSG_TRUNCATED="too large to inline — read it with the Read tool before working:"
 MSG_LEGACY="An old AgentSoul install was found in .soul/."
+MSG_MORE="More files in .soul/local/ did not fit here — read every *.md there with the Read tool before working."
 MSG_NO_CORE="AgentSoul: soul file is missing from the plugin."
 # shellcheck source=/dev/null
 [ -r "$HOOK_DIR/messages.sh" ] && . "$HOOK_DIR/messages.sh"
@@ -46,14 +47,25 @@ soul="$project/.soul"
 nl=$'\n'
 ctx="$core"
 
-if [ ! -d "$soul" ]; then
+# A cloned repo is untrusted: a symlink in .soul/ could point at ~/.aws/credentials or
+# /proc/self/environ and leak it into the model context. Never follow links.
+is_plain_file() { [ -f "$1" ] && [ ! -L "$1" ]; }
+
+# Read at most BUDGET+1 characters, so a huge file costs nothing.
+read_capped() {
+  local out=""
+  IFS= read -r -d '' -n $((BUDGET + 1)) out < "$1" || true
+  printf '%s' "$out"
+}
+
+if [ ! -d "$soul" ] || [ -L "$soul" ]; then
   ctx+="$nl$nl$MSG_NO_SOUL"
 else
   status="$MSG_HAS_SOUL"
   for f in stack.md glossary.md; do
-    [ -f "$soul/$f" ] && status+="$nl- .soul/$f"
+    is_plain_file "$soul/$f" && status+="$nl- .soul/$f"
   done
-  if [ -r "$soul/stack.md" ]; then
+  if is_plain_file "$soul/stack.md" && [ -r "$soul/stack.md" ]; then
     while IFS= read -r line || [ -n "$line" ]; do
       case "$line" in
         *"**$MSG_LANG_LABEL:**"*)
@@ -71,23 +83,34 @@ else
   fi
   ctx+="$nl$nl$status"
 
+  # Local rules are the strongest layer, so none may vanish silently. RESERVE keeps room
+  # for the final "more files" line; a pointer line must fit too, or we stop and say so.
+  RESERVE=400
   first_local=1
-  for f in "$soul"/local/*.md; do
-    [ -f "$f" ] || continue
-    rel=".soul/local/${f##*/}"
-    if [ "$first_local" -eq 1 ]; then
-      ctx+="$nl$nl$MSG_LOCAL"
-      first_local=0
-    fi
-    body=""
-    [ -r "$f" ] && body="$(<"$f")"
-    block="$nl$nl### $rel$nl$body"
-    if [ $(( ${#ctx} + ${#block} )) -le "$BUDGET" ]; then
-      ctx+="$block"
-    else
-      ctx+="$nl- $rel — $MSG_TRUNCATED $rel"
-    fi
-  done
+  more=0
+  if [ ! -L "$soul/local" ]; then
+    for f in "$soul"/local/*.md; do
+      is_plain_file "$f" || continue
+      rel=".soul/local/${f##*/}"
+      if [ "$first_local" -eq 1 ]; then
+        ctx+="$nl$nl$MSG_LOCAL"
+        first_local=0
+      fi
+      body=""
+      [ -r "$f" ] && body="$(read_capped "$f")"
+      block="$nl$nl### $rel$nl$body"
+      pointer="$nl- $rel — $MSG_TRUNCATED $rel"
+      if [ $(( ${#ctx} + ${#block} )) -le $(( BUDGET - RESERVE )) ]; then
+        ctx+="$block"
+      elif [ $(( ${#ctx} + ${#pointer} )) -le $(( BUDGET - RESERVE )) ]; then
+        ctx+="$pointer"
+      else
+        more=1
+        break
+      fi
+    done
+  fi
+  [ "$more" -eq 1 ] && ctx+="$nl$nl$MSG_MORE"
 fi
 
 # Hard stop: never exceed the budget, whatever the inputs.

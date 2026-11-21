@@ -80,3 +80,12 @@ test("validate: a second locale must have the same agents, skills, profiles and 
     const e = errors(r)
     assert.ok(e.some((x) => /src\/locales\/(en|ru): agents\/skills\/profiles\/templates differ/.test(x)), e.join("\n"))
 })
+
+test("validate: hook wiring — untranslated message and missing hook script", () => {
+    const r = repoCopy()
+    edit(r, "src/locales/ru/soul/messages.sh", 'MSG_MORE="', 'MSG_MORE_OLD="')
+    edit(r, "src/shared/hooks/hooks.json", "run-hook.cmd", "run-hooks.cmd")
+    const e = errors(r)
+    assert.ok(e.some((x) => /messages\.sh: MSG_MORE is not translated/.test(x)), e.join("\n"))
+    assert.ok(e.some((x) => /hooks\.json: references hooks\/run-hooks\.cmd/.test(x)))
+})

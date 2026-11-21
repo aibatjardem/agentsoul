@@ -12,28 +12,59 @@ description: "Set up AgentSoul in the current project: asks about the project, i
 **Где шаблоны.** В папке этого skill (путь к ней показан при его загрузке как «Base directory for this skill») лежат:
 - `profiles/<имя>/stack.md` и `profiles/<имя>/profile.json` — профили стека;
 - `templates/glossary.md` — шаблон глоссария;
-- `templates/local/rules.md` — шаблон локальных правил.
+- `templates/local/rules.md` — шаблон локальных правил;
+- `legacy-0.1.json` — хеши файлов, которые ставила версия 0.1 (для шага 0).
 
 Читайте их инструментом Read по полному пути и копируйте содержимое в проект инструментом Write.
 
 ## Шаг 0. Старая установка
 
-Проверьте корень проекта:
+Версии AgentSoul 0.1 и 0.2 копировали файлы прямо в проект. Теперь всё это даёт плагин, а старые копии мешают: одноимённые агенты проекта сильнее плагинных. Но в тех же папках могут лежать **собственные файлы пользователя с такими же именами** — их трогать нельзя. Поэтому решение принимается только по правилам ниже, а не «по похожему имени».
 
-- `.soul/.agentsoul.json`, `.soul/identity.md`, `.soul/agents.md`, `.soul/README.md`, `.soul/config.json`;
-- блок между `<!-- agentsoul:begin` и `<!-- agentsoul:end -->` в `CLAUDE.md`, а также строки `- @.soul/...` в `CLAUDE.md`;
-- в `.claude/agents/` — файлы с именами агентов AgentSoul (`ddd-architect.md`, `code-reviewer.md`, `soul-keeper.md` и остальные из карты команды, а также `architecture-guide.md`, `conventions-guide.md`, `infrastructure-guide.md`, `stack-reference.md`, `project-initializer.md`, `glossary-initializer.md`);
-- в `.claude/skills/` — каталоги с именами skills AgentSoul;
-- `scripts/check-soul.sh`.
+### 0.1. Найти признаки старой установки
 
-Если ничего нет — переходите к шагу 1.
+`.soul/.agentsoul.json` (это 0.2), `.soul/identity.md`, `.soul/agents.md`, `.soul/README.md`, `.soul/config.json`, `scripts/check-soul.sh`. Нет ни одного — переходите к шагу 1.
 
-Если что-то есть — это старая установка (0.1 или 0.2), которая копировала файлы в проект. Теперь всё это даёт плагин, а копии будут мешать: одноимённые агенты проекта сильнее плагинных. Сделайте так:
+### 0.2. Разложить каждый кандидат по трём спискам
 
-1. Покажите **полный список** того, что предлагаете удалить, и того, что останется: `stack.md`, `glossary.md`, `local/`, `.soul/.backup/` и весь остальной текст `CLAUDE.md` остаются.
-2. Предупредите: если пользователь когда-то правил эти файлы руками, правки пропадут. Предложите сначала посмотреть отличия (`git diff` или `git log` по файлу) и перенести нужное в `.soul/local/`.
-3. Удаляйте только после явного «да». Агента в `.claude/agents/` удаляйте, только если его имя совпадает с агентом AgentSoul **и** в его frontmatter есть одно из полей AgentSoul (`name` совпадает, а в теле есть раздел «Контекст проекта — прочитать ПЕРВЫМ»). Чужого агента с тем же именем не трогайте — скажите о нём пользователю.
-4. Из `CLAUDE.md` удалите только блок `agentsoul:begin … agentsoul:end` и строки `- @.soul/…`.
+Кандидаты — только эти пути:
+
+- `.soul/identity.md`, `.soul/agents.md`, `.soul/README.md`, `.soul/config.json`, `.soul/.agentsoul.json`, `scripts/check-soul.sh`;
+- `.claude/agents/<имя>.md` для имён: `api-designer`, `code-architect`, `code-reviewer`, `ddd-architect`, `debugging-specialist`, `deployment-specialist`, `domain-expert`, `frontend-designer`, `frontend-specialist`, `git-specialist`, `observability-architect`, `performance-optimizer`, `persistence-architect`, `refactoring-expert`, `release-manager`, `security-specialist`, `soul-keeper`, `task-planner`, `testing-specialist`, `architecture-guide`, `conventions-guide`, `infrastructure-guide`, `stack-reference`, `project-initializer`, `glossary-initializer`;
+- `.claude/skills/<имя>/SKILL.md` для имён: `architecture-guide`, `conventions-guide`, `infrastructure-guide`, `stack-reference`, `project-initializer`, `glossary-initializer` (и весь каталог `.claude/skills/<имя>/`). **Никакие другие каталоги в `.claude/skills/` не трогайте**, даже `setup` или `soul`.
+
+Для каждого кандидата посчитайте sha256 командой `shasum -a 256 <файл>` (на Linux и в Git Bash — `sha256sum <файл>`) и определите список:
+
+1. **«Нетронутая копия AgentSoul»** — хеш совпал с одним из:
+   - значением этого пути в `files` из `.soul/.agentsoul.json` (если файл есть);
+   - одним из хешей этого пути в `legacy-0.1.json` из папки этого skill.
+   Файлы `.soul/config.json`, `.soul/.agentsoul.json` и `scripts/check-soul.sh` — тоже в этот список, если существуют.
+2. **«Изменённая копия AgentSoul»** — хеш не совпал, но файл **точно** из AgentSoul: в его frontmatter `name:` равно имени файла (для skill — имени каталога) **и** выполнено одно из:
+   - путь есть в `files` из `.soul/.agentsoul.json`;
+   - в теле есть строка ровно `## Контекст проекта — прочитать ПЕРВЫМ`;
+   - путь есть в `legacy-0.1.json`, а `.soul/identity.md` в проекте существует.
+3. **«Чужой файл»** — всё остальное. Его не удаляют и не меняют.
+
+### 0.3. CLAUDE.md
+
+Только эти фрагменты:
+
+- блок от строки, начинающейся с `<!-- agentsoul:begin`, до строки `<!-- agentsoul:end -->` включительно;
+- **вне блока** — строки ровно `- @.soul/identity.md`, `- @.soul/agents.md`, `- @.soul/stack.md`, `- @.soul/glossary.md` (другие `- @…` строки пользователя не трогайте);
+- раздел `## ⚠ Session bootstrap — прочитать ПЕРВЫМ` — от этого заголовка до следующей строки `---` или следующего заголовка `## `;
+- строка `Полный индекс субагентов и правила вызова — в `.soul/agents.md`.`
+
+### 0.4. Показать и подтвердить
+
+Покажите пользователю три списка и фрагменты CLAUDE.md, которые уберёте. Объясните простыми словами:
+
+- **нетронутые копии** — удаляются: их заменил плагин;
+- **изменённые копии** — пользователь когда-то их правил. Для каждой предложите посмотреть изменения (`git log -p -- <файл>` или открыть файл) и перенести нужное в `.soul/local/`. Удалять — только по отдельному «да» на каждый файл;
+- **чужие файлы** — остаются как есть; если имя совпадает с агентом AgentSoul, предупредите, что в этом проекте вызов `@agent-<имя>` пойдёт к ним, а плагинный агент доступен как `{{plugin}}:<имя>`.
+
+Остаются всегда: `.soul/stack.md`, `.soul/glossary.md`, `.soul/local/`, `.soul/.backup/` и весь остальной текст `CLAUDE.md`.
+
+Удаляйте только после явного «да». После правки `CLAUDE.md` покажите получившийся файл.
 
 ## Шаг 1. Проект
 

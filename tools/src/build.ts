@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { dirname, join, relative } from "node:path"
 import { packageVersion } from "./paths.js"
 
@@ -102,13 +102,15 @@ export function buildAll(root: string): FileMap {
     return out
 }
 
-/** Writes the build; removes stale files inside plugins/<name>/ that the build no longer produces. */
+/** Every file currently under plugins/ (all plugin dirs, including ones whose locale was removed), repo-relative. */
+function existingPluginFiles(root: string): string[] {
+    return listFiles(join(root, "plugins")).map((p) => `plugins/${p}`)
+}
+
+/** Writes the build; removes files under plugins/ that the build no longer produces. */
 export function writeBuild(root: string, files: FileMap): void {
-    for (const name of listLocales(root).map(pluginName)) {
-        const dir = join(root, "plugins", name)
-        for (const path of listFiles(dir)) {
-            if (!files.has(`plugins/${name}/${path}`)) rmSync(join(dir, path))
-        }
+    for (const path of existingPluginFiles(root)) {
+        if (!files.has(path)) rmSync(join(root, path))
     }
     for (const [path, content] of files) {
         const abs = join(root, path)
@@ -125,10 +127,8 @@ export function diffBuild(root: string, files: FileMap): string[] {
         const abs = join(root, path)
         if (!existsSync(abs) || readFileSync(abs, "utf8") !== content) drift.push(path)
     }
-    for (const name of listLocales(root).map(pluginName)) {
-        for (const path of listFiles(join(root, "plugins", name))) {
-            if (!files.has(`plugins/${name}/${path}`)) drift.push(`plugins/${name}/${path}`)
-        }
+    for (const path of existingPluginFiles(root)) {
+        if (!files.has(path)) drift.push(path)
     }
     return drift.sort()
 }
@@ -157,7 +157,10 @@ function readTree(dir: string): FileMap {
     return out
 }
 
-/** Relative file paths under dir (sorted, `/`-separated), skipping macOS metadata. */
+/**
+ * Relative file paths under dir (sorted, `/`-separated), skipping macOS metadata.
+ * Symlinks are refused: following one could make the stale-file pass delete outside plugins/.
+ */
 function listFiles(dir: string): string[] {
     if (!existsSync(dir)) return []
     const out: string[] = []
@@ -165,7 +168,9 @@ function listFiles(dir: string): string[] {
         for (const entry of readdirSync(d).sort()) {
             if (entry.startsWith("._") || entry === ".DS_Store") continue
             const abs = join(d, entry)
-            if (statSync(abs).isDirectory()) walk(abs)
+            const st = lstatSync(abs)
+            if (st.isSymbolicLink()) throw new Error(`refusing symlink ${abs}`)
+            if (st.isDirectory()) walk(abs)
             else out.push(relative(dir, abs).split("\\").join("/"))
         }
     }

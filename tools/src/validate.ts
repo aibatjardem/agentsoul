@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { spawnSync } from "node:child_process"
 import { buildLocale, listLocales, pluginName, type FileMap } from "./build.js"
@@ -59,6 +59,45 @@ export function validateSources(root: string): Issue[] {
     for (const script of ["src/shared/hooks/session-start", ...locales.map((l) => `src/locales/${l}/soul/messages.sh`)]) {
         const res = spawnSync("bash", ["-n", join(root, script)], { encoding: "utf8" })
         if (res.status !== 0) issues.push(error(script, `bash syntax error: ${res.stderr.trim()}`))
+    }
+    issues.push(...checkHookWiring(root, locales))
+    return issues
+}
+
+/**
+ * The hook must find what it needs: every MSG_* default it declares is translated in each
+ * locale (else that locale silently falls back to English), hooks.json points at shipped
+ * files, and the scripts are executable in git (exFAT checkouts lose the bit on disk).
+ */
+function checkHookWiring(root: string, locales: readonly string[]): Issue[] {
+    const issues: Issue[] = []
+    const hook = readFileSync(join(root, "src/shared/hooks/session-start"), "utf8")
+    const keys = [...new Set([...hook.matchAll(/^(MSG_[A-Z_]+)=/gm)].map((m) => m[1] ?? ""))]
+    for (const locale of locales) {
+        const where = `src/locales/${locale}/soul/messages.sh`
+        const messages = readFileSync(join(root, where), "utf8")
+        for (const key of keys) {
+            if (!new RegExp(`^${key}=`, "m").test(messages)) issues.push(error(where, `${key} is not translated`))
+        }
+    }
+
+    const hooksJson = readFileSync(join(root, "src/shared/hooks/hooks.json"), "utf8")
+    for (const m of hooksJson.matchAll(/\$\{CLAUDE_PLUGIN_ROOT\}\/hooks\/([A-Za-z0-9._-]+)\\?"?\s*([A-Za-z0-9._-]+)?/g)) {
+        for (const file of [m[1], m[2]]) {
+            if (file !== undefined && !existsSync(join(root, "src/shared/hooks", file))) {
+                issues.push(error("src/shared/hooks/hooks.json", `references hooks/${file}, which does not exist`))
+            }
+        }
+    }
+
+    const ls = spawnSync("git", ["ls-files", "-s", "--", "src/shared/hooks", "plugins"], { cwd: root, encoding: "utf8" })
+    if (ls.status === 0) {
+        for (const line of ls.stdout.split("\n")) {
+            const [mode, , , path] = line.split(/\s+/)
+            if (path !== undefined && /\/hooks\/(session-start|run-hook\.cmd)$/.test(path) && mode !== "100755") {
+                issues.push(error(path, `not executable in git (mode ${mode}) — run: git update-index --chmod=+x ${path}`))
+            }
+        }
     }
     return issues
 }
