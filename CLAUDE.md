@@ -1,18 +1,11 @@
-<!-- agentsoul:begin — managed by `agentsoul update`, edits inside are overwritten -->
-- @.soul/identity.md
-- @.soul/agents.md
 - @.soul/stack.md
 - @.soul/glossary.md
 - @.soul/local/dogfood.md
 
-## Session bootstrap — прочитать ПЕРВЫМ
+## Этот репозиторий — исходники плагина AgentSoul
 
-Перед любой нетривиальной задачей проверь baseline:
+Пользователи ставят плагин через `/plugin` из маркетплейса `aibatjardem/agentsoul`. Здесь — его исходники и инструменты сборки.
 
-1. `.soul/stack.md` содержит `TBD` → предложи запустить skill **`project-initializer`** и дождись его завершения, прежде чем писать код или архитектуру.
-2. `.soul/glossary.md` содержит `TBD` → предложи skill **`glossary-initializer`**.
-
-Можно работать и с пустым baseline: тривиальные правки одного файла, исследовательские вопросы, или пользователь явно сказал «делай быстро».
-
-Правила из `.soul/local/*.md` сильнее всего остального. Карта skills и субагентов — в `.soul/agents.md`.
-<!-- agentsoul:end -->
+- Правь только `src/` (контент) и `tools/src/` (сборка, валидатор). `plugins/` и `.claude-plugin/marketplace.json` генерируются: `npm run build`.
+- После любой правки: `npm run build && npm test && npm run check`. CI падает, если собранный плагин отстал от исходников.
+- Чтобы попробовать плагин вживую: `claude --plugin-dir plugins/agentsoul-ru` в любом тестовом проекте.

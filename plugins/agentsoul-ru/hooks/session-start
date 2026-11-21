@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+# AgentSoul — SessionStart hook.
+#
+# Injects the compact soul plus the state of the current project into the main
+# agent's context. Uses bash builtins only: at session start Claude Code may run
+# hooks with a broken or empty PATH, so no cat/sed/wc. Never fails the session:
+# always exits 0 and prints valid JSON.
+#
+# Budget: Claude Code caps additionalContext at 10 000 characters (anything
+# longer is replaced by a file path). We stay under BUDGET with a margin.
+
+set -u
+BUDGET=9000
+
+case "$0" in
+  */*|*\\*) HOOK_DIR="$(cd "${0%[/\\]*}" && pwd)" ;;
+  *) HOOK_DIR="$(pwd)" ;;
+esac
+
+# Count characters, not bytes: Cyrillic is two bytes per letter in UTF-8.
+probe="ж"
+for loc in C.UTF-8 en_US.UTF-8 C.utf8; do
+  [ "${#probe}" -eq 1 ] && break
+  export LC_ALL="$loc" 2>/dev/null
+  probe="ж"
+done
+
+# Locale strings (MSG_*). Defaults keep the hook useful if the file is missing.
+MSG_LANG_LABEL="Languages"
+MSG_NO_SOUL="AgentSoul is not set up in this project (no .soul/ directory)."
+MSG_HAS_SOUL="Project files:"
+MSG_LANGS="Languages:"
+MSG_READ="Read these files before any non-trivial task."
+MSG_LOCAL="Local rules (strongest layer):"
+MSG_TRUNCATED="too large to inline — read it with the Read tool before working:"
+MSG_LEGACY="An old AgentSoul install was found in .soul/."
+MSG_NO_CORE="AgentSoul: soul file is missing from the plugin."
+# shellcheck source=/dev/null
+[ -r "$HOOK_DIR/messages.sh" ] && . "$HOOK_DIR/messages.sh"
+
+core="$MSG_NO_CORE"
+[ -r "$HOOK_DIR/soul-core.md" ] && core="$(<"$HOOK_DIR/soul-core.md")"
+
+project="${CLAUDE_PROJECT_DIR:-$PWD}"
+soul="$project/.soul"
+nl=$'\n'
+ctx="$core"
+
+if [ ! -d "$soul" ]; then
+  ctx+="$nl$nl$MSG_NO_SOUL"
+else
+  status="$MSG_HAS_SOUL"
+  for f in stack.md glossary.md; do
+    [ -f "$soul/$f" ] && status+="$nl- .soul/$f"
+  done
+  if [ -r "$soul/stack.md" ]; then
+    while IFS= read -r line || [ -n "$line" ]; do
+      case "$line" in
+        *"**$MSG_LANG_LABEL:**"*)
+          langs="${line#*"**$MSG_LANG_LABEL:**"}"
+          langs="${langs#"${langs%%[![:space:]]*}"}"
+          langs="${langs%$'\r'}"
+          status+="$nl$MSG_LANGS $langs"
+          break ;;
+      esac
+    done < "$soul/stack.md"
+  fi
+  status+="$nl$MSG_READ"
+  if [ -f "$soul/.agentsoul.json" ] || [ -f "$soul/identity.md" ]; then
+    status+="$nl$nl$MSG_LEGACY"
+  fi
+  ctx+="$nl$nl$status"
+
+  first_local=1
+  for f in "$soul"/local/*.md; do
+    [ -f "$f" ] || continue
+    rel=".soul/local/${f##*/}"
+    if [ "$first_local" -eq 1 ]; then
+      ctx+="$nl$nl$MSG_LOCAL"
+      first_local=0
+    fi
+    body=""
+    [ -r "$f" ] && body="$(<"$f")"
+    block="$nl$nl### $rel$nl$body"
+    if [ $(( ${#ctx} + ${#block} )) -le "$BUDGET" ]; then
+      ctx+="$block"
+    else
+      ctx+="$nl- $rel — $MSG_TRUNCATED $rel"
+    fi
+  done
+fi
+
+# Hard stop: never exceed the budget, whatever the inputs.
+[ "${#ctx}" -gt "$BUDGET" ] && ctx="${ctx:0:$BUDGET}"
+
+escape_for_json() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\r'/}"
+  s="${s//$'\t'/\\t}"
+  s="${s//$'\n'/\\n}"
+  # Remaining C0 control characters are invalid in JSON strings — drop them.
+  local c
+  for c in $'\001' $'\002' $'\003' $'\004' $'\005' $'\006' $'\007' $'\010' $'\013' $'\014' \
+           $'\016' $'\017' $'\020' $'\021' $'\022' $'\023' $'\024' $'\025' $'\026' $'\027' \
+           $'\030' $'\031' $'\032' $'\033' $'\034' $'\035' $'\036' $'\037'; do
+    s="${s//$c/}"
+  done
+  printf '%s' "$s"
+}
+
+printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "$(escape_for_json "$ctx")"
+exit 0

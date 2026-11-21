@@ -1,5 +1,5 @@
 node_modules/
-dist/
+tools/dist/
 *.log
 .DS_Store
 .env
@@ -9,3 +9,6 @@ dist/
 .idea/
 .vscode/
 *.swp
+
+# macOS metadata on non-APFS volumes
+._*

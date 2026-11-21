@@ -1,25 +1,13 @@
 {
     "name": "@aibatjardem/agentsoul",
-    "version": "0.2.0",
-    "description": "Soul-kit for Claude Code: soul (always loaded) → skills (guides and setup dialogs, on demand) → subagents (isolated executors with narrow tools and explicit models). Installs, updates safely, validates.",
+    "version": "0.3.0",
+    "description": "AgentSoul — Claude Code plugin: soul, language packs and 19 specialist subagents. This package is the build tooling; users install the plugin with /plugin.",
     "type": "module",
-    "bin": {
-        "agentsoul": "dist/cli.js"
-    },
-    "files": [
-        "dist",
-        "core",
-        "README.md",
-        "LICENSE"
-    ],
     "scripts": {
-        "build": "tsc",
+        "build": "tsc && node tools/dist/cli.js build",
         "typecheck": "tsc --noEmit",
-        "clean": "rm -rf dist",
-        "test": "npm run build && node --test test/*.test.mjs",
-        "check": "npm run build && node dist/cli.js check --source && node dist/cli.js check",
-        "dogfood": "npm run build && node dist/cli.js update",
-        "prepublishOnly": "npm run clean && npm run build && node --test test/*.test.mjs && node dist/cli.js check --source"
+        "test": "tsc && node --test test/*.test.mjs",
+        "check": "tsc && node tools/dist/cli.js check"
     },
     "keywords": [
         "claude-code",
@@ -53,5 +41,6 @@
     "devDependencies": {
         "@types/node": "^22.0.0",
         "typescript": "^5.6.0"
-    }
+    },
+    "private": true
 }

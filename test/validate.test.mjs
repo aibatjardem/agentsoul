@@ -1,100 +1,82 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { rmSync } from "node:fs"
+import { cpSync, readFileSync, rmSync } from "node:fs"
 import { join } from "node:path"
-import { applyPlan, planInstall } from "../dist/kit/install.js"
-import { loadKit } from "../dist/kit/kit.js"
-import { validateSource, validateTarget } from "../dist/kit/validate.js"
-import { CORE, append, coreCopy, read, tempDir, write } from "./helpers.mjs"
+import { validateSources } from "../tools/dist/validate.js"
+import { ROOT, repoCopy, write } from "./helpers.mjs"
 
-const sourceErrors = (core) => validateSource(loadKit(core)).filter((i) => i.level === "error").map((i) => `${i.where}: ${i.message}`)
-const targetIssues = (t) => validateTarget(t, loadKit(CORE), "9.9.9").map((i) => `${i.level} ${i.where}: ${i.message}`)
-const installed = () => {
-    const t = tempDir()
-    applyPlan(planInstall({ kit: loadKit(CORE), target: t, version: "9.9.9", force: false }), t)
-    return t
+const errors = (repo) => validateSources(repo).filter((i) => i.level === "error").map((i) => `${i.where}: ${i.message}`)
+const edit = (repo, path, from, to) => {
+    const abs = join(repo, path)
+    const before = readFileSync(abs, "utf8")
+    assert.ok(before.includes(from), `fixture: "${from}" not in ${path}`)
+    write(repo, path, before.replace(from, to))
 }
-const edit = (core, path, from, to) => {
-    const before = read(core, path)
-    assert.ok(before.includes(from), `fixture: "${from}" not found in ${path}`)
-    write(core, path, before.replace(from, to))
-}
+const A = "src/locales/ru/agents"
 
-test("source: the shipped kit is consistent", () => {
-    assert.deepEqual(sourceErrors(CORE), [])
+test("validate: the shipped sources are clean", () => {
+    assert.deepEqual(errors(ROOT), [])
 })
 
-test("source: catches a skills: reference to a skill that does not exist", () => {
-    const core = coreCopy()
-    edit(core, "agents/ddd-architect.md", "skills: [architecture-guide]", "skills: [architecture-guide, ghost-guide]")
-    assert.ok(sourceErrors(core).some((e) => /ddd-architect.*"ghost-guide" is not an installed skill/.test(e)))
+test("validate: forbidden frontmatter field, bad model, missing Skill tool", () => {
+    const r = repoCopy()
+    edit(r, `${A}/task-planner.md`, "model: inherit", "model: gpt-5\nhooks: []")
+    edit(r, `${A}/code-reviewer.md`, "tools: [Read, Grep, Glob, Bash, Skill]", "tools: [Read, Grep]")
+    const e = errors(r)
+    assert.ok(e.some((x) => /task-planner.*field "hooks" is not allowed/.test(x)), e.join("\n"))
+    assert.ok(e.some((x) => /task-planner.*invalid model "gpt-5"/.test(x)))
+    assert.ok(e.some((x) => /code-reviewer.*must include Skill/.test(x)))
 })
 
-test("source: catches name/filename mismatch, unknown tool, invalid model", () => {
-    const core = coreCopy()
-    edit(core, "agents/task-planner.md", "name: task-planner", "name: planner")
-    edit(core, "agents/code-reviewer.md", "tools: [Read, Grep, Glob, Bash]", "tools: [Read, Hammer]")
-    edit(core, "agents/api-designer.md", "model: opus", "model: gpt-5")
-    const errors = sourceErrors(core)
-    assert.ok(errors.some((e) => /task-planner.*name "planner" != filename/.test(e)), errors.join("\n"))
-    assert.ok(errors.some((e) => /code-reviewer.*unknown tool "Hammer"/.test(e)))
-    assert.ok(errors.some((e) => /api-designer.*invalid model "gpt-5"/.test(e)))
+test("validate: skills: must be prefixed and must exist", () => {
+    const r = repoCopy()
+    edit(r, `${A}/ddd-architect.md`, "skills: [{{plugin}}:architecture-guide]", "skills: [architecture-guide, {{plugin}}:ghost]")
+    const e = errors(r)
+    assert.ok(e.some((x) => /"architecture-guide" must be written as agentsoul-ru:<skill>/.test(x)), e.join("\n"))
+    assert.ok(e.some((x) => /"agentsoul-ru:ghost" is not a skill/.test(x)))
 })
 
-test("source: index must list every agent and skill, and nothing else", () => {
-    const core = coreCopy()
-    edit(core, "soul/agents.md", "| `release-manager` | RW |", "| `release-boss` | RW |")
-    const errors = sourceErrors(core)
-    assert.ok(errors.some((e) => /"release-manager" has no row/.test(e)))
-    assert.ok(errors.some((e) => /index row "release-boss" matches no agent or skill/.test(e)))
+test("validate: dangling reference in prose and unresolved placeholder", () => {
+    const r = repoCopy()
+    edit(r, `${A}/git-specialist.md`, "# ", "Спроси `{{plugin}}:merge-wizard`, {{plugn}}.\n\n# ")
+    const e = errors(r)
+    assert.ok(e.some((x) => /mentions agentsoul-ru:merge-wizard/.test(x)), e.join("\n"))
+    assert.ok(e.some((x) => /unresolved \{\{…\}\} placeholder/.test(x)))
 })
 
-test("source: a kit agent without an explicit model is an error", () => {
-    const core = coreCopy()
-    edit(core, "agents/git-specialist.md", "model: sonnet\n", "")
-    assert.ok(sourceErrors(core).some((e) => /git-specialist.*explicit `model`/.test(e)))
+test("validate: map must list every agent and skill, nothing else", () => {
+    const r = repoCopy()
+    edit(r, "src/locales/ru/soul/agents.md", "| `{{plugin}}:release-manager` |", "| `{{plugin}}:release-boss` |")
+    const e = errors(r)
+    assert.ok(e.some((x) => /"release-manager" has no row/.test(x)))
+    assert.ok(e.some((x) => /map row "release-boss" matches no agent or skill/.test(x)))
 })
 
-test("source: removing a skill that agents preload is caught (no whitelist hole)", () => {
-    const core = coreCopy()
-    rmSync(join(core, "skills", "conventions-guide"), { recursive: true })
-    const errors = sourceErrors(core)
-    assert.ok(errors.some((e) => /"conventions-guide" is not an installed skill/.test(e)))
-    assert.ok(errors.some((e) => /index row "conventions-guide" matches no agent or skill/.test(e)))
+test("validate: Russian description, oversized soul core, npm-era wording", () => {
+    const r = repoCopy()
+    edit(r, `${A}/domain-expert.md`, 'description: "Use when', 'description: "Используй когда')
+    write(r, "src/locales/ru/soul/core.md", "ж".repeat(7000))
+    edit(r, "src/locales/ru/skills/stack-reference/SKILL.md", "# ", "Запусти npx agentsoul update.\n\n# ")
+    const e = errors(r)
+    assert.ok(e.some((x) => /domain-expert.*must be in English/.test(x)), e.join("\n"))
+    assert.ok(e.some((x) => /core\.md: 7000 characters, budget is 6500/.test(x)))
+    assert.ok(e.some((x) => /stack-reference.*npm-era/.test(x)))
 })
 
-test("target: clean install has no errors; only baseline TBD warnings", () => {
-    const issues = targetIssues(installed())
-    assert.deepEqual(issues.filter((i) => i.startsWith("error")), [])
-    assert.ok(issues.every((i) => /not filled in yet/.test(i)), issues.join("\n"))
+test("validate: broken hook syntax and a profile without the languages line", () => {
+    const r = repoCopy()
+    write(r, "src/shared/hooks/session-start", "#!/usr/bin/env bash\nif then fi\n")
+    edit(r, "src/locales/ru/profiles/blank/stack.md", "- **Языки:** TBD\n", "")
+    const e = errors(r)
+    assert.ok(e.some((x) => /session-start: bash syntax error/.test(x)), e.join("\n"))
+    assert.ok(e.some((x) => /profiles\/blank\/stack\.md: has no "\*\*Языки:\*\*" line/.test(x)))
 })
 
-test("target: reports drift, missing managed files and a broken CLAUDE.md block", () => {
-    const t = installed()
-    append(t, ".soul/agents.md", "\nhand edit\n")
-    rmSync(join(t, ".claude/agents/security-specialist.md"))
-    write(t, "CLAUDE.md", "# no block\n")
-    const issues = targetIssues(t)
-    assert.ok(issues.some((i) => /warning \.soul\/agents\.md: edited locally/.test(i)))
-    assert.ok(issues.some((i) => /error .*security-specialist\.md: managed file is missing/.test(i)))
-    assert.ok(issues.some((i) => /error CLAUDE\.md: no agentsoul managed block/.test(i)))
-})
-
-test("target: a new local rules file must be imported", () => {
-    const t = installed()
-    write(t, ".soul/local/team.md", "rule\n")
-    assert.ok(targetIssues(t).some((i) => /@\.soul\/local\/team\.md is not imported/.test(i)))
-})
-
-test("target: the project's own agents are not judged", () => {
-    const t = installed()
-    write(t, ".claude/agents/my-helper.md", "no frontmatter at all\n")
-    assert.ok(!targetIssues(t).some((i) => i.includes("my-helper")))
-})
-
-test("target: no manifest → tells 0.1 installs and empty dirs apart", () => {
-    const empty = tempDir()
-    assert.match(targetIssues(empty)[0], /not installed here/)
-    write(empty, ".soul/identity.md", "x")
-    assert.match(targetIssues(empty)[0], /installed by AgentSoul 0\.1/)
+test("validate: a second locale must have the same agents, skills, profiles and templates", () => {
+    const r = repoCopy()
+    cpSync(join(r, "src/locales/ru"), join(r, "src/locales/en"), { recursive: true })
+    rmSync(join(r, "src/locales/en/agents/git-specialist.md"))
+    edit(r, "src/locales/en/soul/agents.md", "| `{{plugin}}:git-specialist` | RW | Сложные merge/rebase/conflict, стратегия ветвления |\n", "")
+    const e = errors(r)
+    assert.ok(e.some((x) => /src\/locales\/(en|ru): agents\/skills\/profiles\/templates differ/.test(x)), e.join("\n"))
 })

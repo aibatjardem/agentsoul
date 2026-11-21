@@ -1,7 +1,0 @@
-{
-    "profile": "{{profile}}",
-    "models": {
-        "default": null,
-        "agents": {}
-    }
-}

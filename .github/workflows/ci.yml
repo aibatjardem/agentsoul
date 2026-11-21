@@ -8,7 +8,7 @@ on:
 
 jobs:
     validate:
-        name: Build + typecheck + test + soul validation
+        name: Typecheck + test + plugin check
         runs-on: ubuntu-latest
 
         steps:
@@ -28,17 +28,8 @@ jobs:
             - name: Typecheck
               run: npm run typecheck
 
-            - name: Build
-              run: npm run build
+            - name: Test (hook, build, validator)
+              run: npm test
 
-            - name: Test
-              run: node --test test/*.test.mjs
-
-            - name: Validate kit sources (core/)
-              run: node dist/cli.js check --source
-
-            - name: Validate dogfood install (repo's own .soul/ and .claude/)
-              run: node dist/cli.js check
-
-            - name: Dry-run npm publish (verify package structure)
-              run: npm publish --dry-run --access public
+            - name: Validate sources and check the committed build is up to date
+              run: npm run check

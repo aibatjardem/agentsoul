@@ -1,78 +1,50 @@
 ## Tech Stack — AgentSoul
 
-> Это **реальный** stack.md проекта AgentSoul (dogfood). Он не является шаблоном. Шаблоны живут в `core/profiles/*/stack.md` и копируются в проекты-консьюмеры через `agentsoul init --profile`.
+> Реальный stack.md репозитория AgentSoul. Шаблоны для проектов пользователей — в `src/locales/<l>/profiles/*/stack.md`.
 
 ### Базовое
 
+- **Языки:** TypeScript, Bash
 - **Название:** AgentSoul
-- **Описание:** Переиспользуемый soul-kit для Claude Code: soul (всегда в контексте) → skills (гайды и опросники, по требованию) → субагенты (изолированные исполнители). CLI ставит, безопасно обновляет и валидирует.
-- **Domain:** developer tooling / меta-программирование Claude Code
-- **Тип:** отдельный пакет (не монорепо)
+- **Описание:** Плагин Claude Code: душа (хук при старте сессии), skills (справочники, языковые пакеты, опросники) и 19 субагентов. Репозиторий — исходники и инструменты сборки; он же маркетплейс `agentsoul`.
+- **Domain:** developer tooling / контент для Claude Code
+- **Тип:** один репозиторий, плагины по локалям в `plugins/`
 
 ### Runtime
 
-- **Runtime:** Node.js ≥20
-- **Язык:** TypeScript 5.6+ (strict, noUncheckedIndexedAccess)
+- **Runtime:** Node.js ≥20 (только для инструментов разработки; пользователю плагина Node не нужен)
+- **Язык:** TypeScript 5 (strict, noUncheckedIndexedAccess), ESM; хук — bash только со встроенными средствами
 - **Package manager:** npm
 - **Monorepo tool:** N/A
 
-### CLI / Backend
+### Инструменты
 
-- **CLI framework:** commander ^12
-- **Module system:** ESM (`type: module`)
-- **HTTP framework:** N/A (не веб-сервис)
-- **DI:** N/A (простая CLI, DI не нужен)
-- **Validation:** ручные type guards на границе (config.json, manifest, frontmatter); YAML — пакет `yaml`
-- **Logger:** `console.*` внутри CLI (это tool для разработчика, не прод-сервис)
-- **Config:** `.soul/config.json` в целевом проекте (профиль, модели субагентов)
+- **Сборка:** `tools/src/build.ts` — `src/locales/<l>` + `src/shared` → `plugins/agentsoul-<l>/`, `.claude-plugin/marketplace.json`
+- **Валидатор:** `tools/src/validate.ts` — frontmatter, ссылки `{{plugin}}:…`, карта команды, бюджет души, синтаксис bash, паритет локалей
+- **Зависимости:** `yaml` (разбор frontmatter)
 
 ### Данные
 
-- **DB:** N/A (stateless CLI)
-- **Файлы:** файловая система — основной "store", операции через `node:fs`
-- **Состояние установки:** манифест `.soul/.agentsoul.json` (версия, профиль, sha256 управляемых файлов)
-- **Cache:** N/A
+- **DB:** N/A — только файлы в git
 
-### Асинхронность
+### Frontend / API
 
-- **Broker:** N/A
-- **Scheduler:** N/A
-
-### Frontend
-
-- N/A (CLI-only)
-
-### API
-
-- **Style:** N/A (CLI-only)
-- **Auth:** N/A
+- N/A
 
 ### Качество
 
-- **Test runner:** node:test (без зависимостей), тесты в `test/*.test.mjs` против `dist/`
-- **E2E:** сценарные тесты init/update/check против temp-директорий и копии `core/`
-- **Linter:** ESLint (+ `@typescript-eslint`)
-- **Formatter:** Prettier (см. `conventions-guide`)
+- **Test runner:** node:test, `test/*.test.mjs` против `tools/dist/` и собранного плагина
 - **Type checker:** tsc
-
-### Observability
-
-- **Logging:** stdout через `console.log` (CLI)
-- **Tracing:** N/A
-- **Metrics:** N/A
-- **Errors:** throw + process.exit — CLI не имеет error tracking в классическом смысле
+- **Проверка плагина:** `claude plugin validate .` и живой запуск `claude -p --plugin-dir plugins/agentsoul-ru`
 
 ### Деплой
 
-- **Hosting:** npm registry (public)
-- **Container:** N/A
-- **CI/CD:** GitHub Actions: typecheck → build → test → check --source → check (dogfood); publish on tag
+- **Распространение:** маркетплейс Claude Code прямо из git (`/plugin marketplace add aibatjardem/agentsoul`); npm не публикуется
+- **CI/CD:** GitHub Actions: typecheck → test → check (валидатор + собранный плагин совпадает с исходниками)
 
 ### Решения и обоснования
 
-- **Почему commander, а не yargs/meow/clipanion:** минимальные зависимости, хорошая TS-поддержка, стандарт де-факто в Node экосистеме для CLI такого размера.
-- **Почему ESM, а не CommonJS:** Node ≥20 полноценно поддерживает ESM, новые проекты не должны наследовать CJS legacy.
-- **Почему нет DI:** CLI с 4 командами не нуждается в композитном корне. Источник kit передаётся параметром (`loadKit(coreDir)`), этого достаточно для тестов.
-- **Почему хеши, а не копии для трёхстороннего слияния:** решение «обновить / оставить локальное / конфликт» требует только сравнения хешей диска, базы и новой версии. Само слияние текста — работа человека (или `soul-keeper`), CLI его не угадывает.
-- **Почему валидатор в CLI, а не bash + Python:** одна среда исполнения (Node), без `pyyaml`, и строгая проверка по манифесту вместо эвристик по суффиксам имён.
-- **Почему файлы, а не БД:** AgentSoul — это набор markdown-файлов, который КОПИРУЕТСЯ в проекты. Никакого state за пределами файловой системы нет и не должно быть.
+- **Почему плагин, а не npm-установщик:** у новичков может не быть Node.js; плагин ставится и обновляется самим Claude Code, без копирования файлов в каждый проект.
+- **Почему собранный плагин коммитится:** маркетплейс читает плагин прямо из git; сборка на стороне пользователя невозможна.
+- **Почему хук на bash без утилит:** Claude Code может запускать SessionStart-хуки со сломанным PATH; на Windows bash даёт Git for Windows через `run-hook.cmd`.
+- **Почему сжатая душа в хуке:** `additionalContext` ограничен 10 000 символами; полный текст — skill `soul`.

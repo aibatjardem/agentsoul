@@ -1,27 +1,39 @@
-import { cpSync, mkdtempSync, readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs"
+import { cpSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
+import { spawnSync } from "node:child_process"
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..")
-export const CORE = join(ROOT, "core")
+export const PLUGIN = join(ROOT, "plugins", "agentsoul-ru")
 
-/** Fresh empty directory for a target project. */
-export function tempDir(prefix = "agentsoul-") {
-    return mkdtempSync(join(tmpdir(), prefix))
-}
+export const tempDir = (prefix = "agentsoul-") => mkdtempSync(join(tmpdir(), prefix))
 
-/** A writable copy of core/ so a test can simulate a new kit release. */
-export function coreCopy() {
-    const dir = join(tempDir("agentsoul-core-"), "core")
-    cpSync(CORE, dir, { recursive: true })
-    return dir
-}
-
-export const read = (dir, path) => readFileSync(join(dir, path), "utf8")
-export const exists = (dir, path) => existsSync(join(dir, path))
 export function write(dir, path, content) {
     mkdirSync(dirname(join(dir, path)), { recursive: true })
     writeFileSync(join(dir, path), content)
 }
-export const append = (dir, path, text) => write(dir, path, read(dir, path) + text)
+
+/** A writable copy of the repo sources (src/, LICENSE, package.json) for negative tests. */
+export function repoCopy() {
+    const dir = tempDir("agentsoul-repo-")
+    for (const p of ["src", "LICENSE", "package.json"]) cpSync(join(ROOT, p), join(dir, p), { recursive: true })
+    return dir
+}
+
+/** Runs the built SessionStart hook and returns { status, json, context, stderr }. */
+export function runHook({ projectDir, cwd, env = {} } = {}) {
+    const res = spawnSync("bash", [join(PLUGIN, "hooks", "session-start")], {
+        cwd: cwd ?? projectDir ?? tmpdir(),
+        env: {
+            PATH: process.env.PATH,
+            HOME: process.env.HOME,
+            CLAUDE_PLUGIN_ROOT: PLUGIN,
+            ...(projectDir !== undefined ? { CLAUDE_PROJECT_DIR: projectDir } : {}),
+            ...env,
+        },
+        encoding: "utf8",
+    })
+    const json = JSON.parse(res.stdout)
+    return { status: res.status, json, context: json.hookSpecificOutput.additionalContext, stderr: res.stderr }
+}
