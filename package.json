@@ -1,6 +1,6 @@
 {
     "name": "@aibatjardem/agentsoul",
-    "version": "0.3.1",
+    "version": "0.3.2",
     "description": "AgentSoul — Claude Code plugin: soul, language packs and 19 specialist subagents. This package is the build tooling; users install the plugin with /plugin.",
     "type": "module",
     "scripts": {

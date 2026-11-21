@@ -123,3 +123,21 @@ test("hook: unreadable .soul file does not break the hook", () => {
     assert.equal(status, 0)
     assert.match(context, /AgentSoul — душа/)
 })
+
+test("hook: runs via the hooks.json command even when scripts lost the executable bit", async () => {
+    const { cpSync, chmodSync, readFileSync } = await import("node:fs")
+    const { spawnSync } = await import("node:child_process")
+    const { PLUGIN } = await import("./helpers.mjs")
+    const copy = join(tempDir("agentsoul-noexec-"), "plugin")
+    cpSync(PLUGIN, copy, { recursive: true })
+    chmodSync(join(copy, "hooks", "run-hook.cmd"), 0o644)
+    chmodSync(join(copy, "hooks", "session-start"), 0o644)
+    const cmd = JSON.parse(readFileSync(join(copy, "hooks", "hooks.json"), "utf8")).hooks.SessionStart[0].hooks[0].command
+    const res = spawnSync("bash", ["-c", cmd], {
+        cwd: tempDir(),
+        env: { PATH: process.env.PATH, HOME: process.env.HOME, CLAUDE_PLUGIN_ROOT: copy },
+        encoding: "utf8",
+    })
+    assert.equal(res.status, 0, res.stderr)
+    assert.match(JSON.parse(res.stdout).hookSpecificOutput.additionalContext, /AgentSoul — душа/)
+})
