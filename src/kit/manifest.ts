@@ -47,9 +47,25 @@ export function readManifest(target: string): Manifest | null {
     }
     const files: Record<string, string> = {}
     for (const [path, hash] of Object.entries(raw.files)) {
+        // The manifest ships inside the project repo, so it is untrusted input: a key like
+        // "../../.bashrc" must never reach a read, write or delete.
+        if (!isManagedPath(path)) {
+            throw new Error(`${MANIFEST_PATH}: refusing path "${path}" — outside AgentSoul's managed namespaces`)
+        }
         if (typeof hash === "string") files[path] = hash
     }
     return { version: raw.version, profile: raw.profile, files }
+}
+
+/**
+ * True for a plain relative path inside a namespace AgentSoul manages
+ * (`.soul/`, `.claude/agents/`, `.claude/skills/`, or the 0.1 bash validator).
+ */
+export function isManagedPath(path: string): boolean {
+    if (path === "scripts/check-soul.sh") return true
+    if (path.includes("\\") || path.includes("\0") || path.startsWith("/")) return false
+    if (path.split("/").some((seg) => seg === ".." || seg === "." || seg === "")) return false
+    return /^(\.soul\/|\.claude\/agents\/|\.claude\/skills\/)/.test(path)
 }
 
 export function serializeManifest(manifest: Manifest): string {

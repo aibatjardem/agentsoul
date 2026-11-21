@@ -1,9 +1,10 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
-import { dirname, join } from "node:path"
+import { readdirSync } from "node:fs"
+import { join } from "node:path"
 import { CLAUDE_MD_PATH, upsertBlock } from "./claude-md.js"
 import { defaultConfig, readConfig } from "./config.js"
 import { DEFAULT_PROFILE, renderManaged, renderSeed, type Kit } from "./kit.js"
 import { MANIFEST_PATH, readManifest, serializeManifest, sha256, type Manifest } from "./manifest.js"
+import { safeCopy, safeExists, safeRead, safeRemove, safeWrite } from "./safe-fs.js"
 
 /** Suffix for the incoming kit version when a managed file was edited locally. */
 export const NEW_SUFFIX = ".agentsoul-new"
@@ -67,7 +68,7 @@ export function planInstall(options: PlanOptions): Plan {
     const seed = renderSeed(kit, config.profile)
     const items: PlanItem[] = []
     const files: Record<string, string> = {}
-    const legacy = manifest === null && existsSync(join(target, ".soul"))
+    const legacy = manifest === null && safeExists(target, ".soul")
 
     /**
      * Base hash = the kit version the project last accepted. From the manifest when there is
@@ -83,7 +84,7 @@ export function planInstall(options: PlanOptions): Plan {
     }
 
     for (const [path, content] of desired) {
-        const disk = readOptional(join(target, path))
+        const disk = safeRead(target, path)
         const next = sha256(content)
 
         if (disk === null) {
@@ -120,23 +121,23 @@ export function planInstall(options: PlanOptions): Plan {
     const previouslyShipped: Iterable<string> = manifest !== null ? Object.keys(manifest.files) : legacy ? kit.legacy.keys() : []
     for (const path of previouslyShipped) {
         if (desired.has(path)) continue
-        const disk = readOptional(join(target, path))
+        const disk = safeRead(target, path)
         if (disk === null) continue
         items.push({ path, action: baseOf(path, sha256(disk)) === sha256(disk) ? "remove" : "orphan" })
     }
 
     // Seeds restore missing project files, except local-rule templates: once .soul/local/ exists
     // the project owns its contents, and a deleted template must stay deleted.
-    const hasLocalDir = existsSync(join(target, ".soul", "local"))
+    const hasLocalDir = safeExists(target, ".soul/local")
     const seededLocal: string[] = []
     for (const [path, content] of seed) {
-        if (existsSync(join(target, path)) || (hasLocalDir && isLocalRule(path))) continue
+        if (safeExists(target, path) || (hasLocalDir && isLocalRule(path))) continue
         items.push({ path, action: "seed", content })
         if (isLocalRule(path)) seededLocal.push(path)
     }
 
     const localFiles = [...new Set([...listLocalRules(target), ...seededLocal])]
-    const before = readOptional(join(target, CLAUDE_MD_PATH))
+    const before = safeRead(target, CLAUDE_MD_PATH)
     return {
         items,
         claudeMd: { before, after: upsertBlock(before, localFiles) },
@@ -155,41 +156,42 @@ export interface ApplyResult {
  */
 export function applyPlan(plan: Plan, target: string, now: Date = new Date()): ApplyResult {
     const stamp = now.toISOString().replace(/[:.]/g, "-")
-    const backupRoot = join(target, ".soul", ".backup", stamp)
+    const backupRoot = `.soul/.backup/${stamp}`
     let backedUp = false
     const backup = (path: string): void => {
-        const from = join(target, path)
-        if (!existsSync(from)) return
-        const to = join(backupRoot, path)
-        mkdirSync(dirname(to), { recursive: true })
-        copyFileSync(from, to)
+        if (!safeExists(target, path)) return
+        safeCopy(target, path, `${backupRoot}/${path}`)
         backedUp = true
     }
+    const write = (path: string, content: string | undefined): void => {
+        if (content === undefined) throw new Error(`internal: no content planned for ${path}`)
+        safeWrite(target, path, content)
+    }
+    const dropNew = (path: string): void => safeRemove(target, path + NEW_SUFFIX)
 
     for (const item of plan.items) {
-        const abs = join(target, item.path)
         switch (item.action) {
             case "add":
             case "update":
             case "seed":
-                write(abs, item.content)
-                dropNew(abs)
+                write(item.path, item.content)
+                dropNew(item.path)
                 break
             case "overwrite":
                 backup(item.path)
-                write(abs, item.content)
-                dropNew(abs)
+                write(item.path, item.content)
+                dropNew(item.path)
                 break
             case "conflict":
-                write(abs + NEW_SUFFIX, item.content)
+                write(item.path + NEW_SUFFIX, item.content)
                 break
             case "resolve":
             case "unchanged":
-                dropNew(abs)
+                dropNew(item.path)
                 break
             case "remove":
                 backup(item.path)
-                rmSync(abs, { force: true })
+                safeRemove(target, item.path)
                 break
             case "keep-local":
             case "orphan":
@@ -199,22 +201,18 @@ export function applyPlan(plan: Plan, target: string, now: Date = new Date()): A
 
     if (plan.claudeMd.before !== plan.claudeMd.after) {
         backup(CLAUDE_MD_PATH)
-        write(join(target, CLAUDE_MD_PATH), plan.claudeMd.after)
+        write(CLAUDE_MD_PATH, plan.claudeMd.after)
     }
-    write(join(target, MANIFEST_PATH), serializeManifest(plan.manifest))
+    write(MANIFEST_PATH, serializeManifest(plan.manifest))
 
-    if (backedUp) {
-        const ignore = join(target, ".soul", ".backup", ".gitignore")
-        if (!existsSync(ignore)) write(ignore, "*\n")
-    }
-    return { backupDir: backedUp ? backupRoot : null }
+    if (backedUp && !safeExists(target, ".soul/.backup/.gitignore")) write(".soul/.backup/.gitignore", "*\n")
+    return { backupDir: backedUp ? join(target, backupRoot) : null }
 }
 
 /** Project-relative paths of `.soul/local/*.md`. */
 export function listLocalRules(target: string): string[] {
-    const dir = join(target, ".soul", "local")
-    if (!existsSync(dir)) return []
-    return readdirSync(dir)
+    if (!safeExists(target, ".soul/local")) return []
+    return readdirSync(join(target, ".soul", "local"))
         .filter((f) => f.endsWith(".md") && !f.startsWith("._"))
         .sort()
         .map((f) => `.soul/local/${f}`)
@@ -222,18 +220,4 @@ export function listLocalRules(target: string): string[] {
 
 function isLocalRule(path: string): boolean {
     return /^\.soul\/local\/[^/]+\.md$/.test(path)
-}
-
-function readOptional(path: string): string | null {
-    return existsSync(path) ? readFileSync(path, "utf8") : null
-}
-
-function write(path: string, content: string | undefined): void {
-    if (content === undefined) throw new Error(`internal: no content planned for ${path}`)
-    mkdirSync(dirname(path), { recursive: true })
-    writeFileSync(path, content, "utf8")
-}
-
-function dropNew(abs: string): void {
-    rmSync(abs + NEW_SUFFIX, { force: true })
 }
