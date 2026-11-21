@@ -34,6 +34,8 @@ claude
 
 Подробнее об установке — на [официальной странице Claude Code](https://code.claude.com).
 
+> Если сверху висит красная полоса **«Your app is out of date»** — сначала обнови Claude Code (кнопка **Update now** или `claude update` в терминале). На старой версии плагины могут работать неправильно.
+
 ## 2. Поставь плагин AgentSoul
 
 Внутри Claude Code (там, где пишешь сообщения) введи по очереди две команды:
@@ -46,7 +48,9 @@ claude
 /plugin install agentsoul-ru@agentsoul
 ```
 
-Потом закрой Claude Code командой `/exit` и запусти снова (`claude`). Плагин подключается при старте.
+Потом **обязательно** закрой Claude Code командой `/exit` и запусти снова (`claude`). Плагин подключается только при старте — в уже открытом окне его команд не будет.
+
+Проверка: введи `/agentsoul` — должно открыться меню AgentSoul.
 
 ## 3. Настрой свой проект
 
@@ -161,6 +165,8 @@ claude plugin update agentsoul-ru@agentsoul
 
 | Проблема | Что делать |
 |---|---|
+| `No commands match "/agentsoul"` | Плагин не установлен или Claude Code не перезапущен. Проверь в `/plugin`, что `agentsoul-ru` есть в списке; если нет — повтори шаг 2. Потом `/exit` и снова `claude` |
+| Красная строка `SessionStart:startup hook failed` | Посмотри, какой плагин указан в пути ошибки. Если это `agentsoul` — обнови плагин (шаг 6). Если другой плагин — ошибка его, не AgentSoul |
 | Claude пишет, что `stack.md` не заполнен | Запусти `/agentsoul-ru:project-initializer` |
 | Не видно агентов или команд `/agentsoul-ru:…` | Перезапусти Claude Code. Проверь в `/plugin`, что плагин `agentsoul-ru` включён |
 | Windows: AgentSoul не загружается | Поставь [Git for Windows](https://git-scm.com/download/win) и перезапусти Claude Code |
