@@ -185,6 +185,7 @@ AgentSoul устроен в три слоя — по тому, как Claude Cod
 
 | Skill | Что делает |
 |---|---|
+| `agentsoul-ru:agentsoul` | Главное меню (`/agentsoul`): состояние проекта и следующие действия. Подходит, когда пользователь не знает, какую команду запустить |
 | `agentsoul-ru:setup` | Настраивает AgentSoul в проекте: языки, профиль стека, термины. Переносит старую установку 0.1/0.2 |
 | `agentsoul-ru:project-initializer` | Опросник по стеку, пишет `.soul/stack.md`. Начинает с языков |
 | `agentsoul-ru:glossary-initializer` | Опросник по терминам домена, пишет `.soul/glossary.md` |

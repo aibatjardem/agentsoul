@@ -33,6 +33,7 @@
 
 ## Skills
 
+- `agentsoul-ru:agentsoul` — главное меню (`/agentsoul`): состояние проекта и что сделать дальше
 - `agentsoul-ru:setup` — настроить AgentSoul в проекте (или перенести старую установку)
 - `agentsoul-ru:project-initializer` — опросник по стеку, пишет `.soul/stack.md`
 - `agentsoul-ru:glossary-initializer` — опросник по терминам домена, пишет `.soul/glossary.md`
